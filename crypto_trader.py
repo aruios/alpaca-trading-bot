@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest, GetAssetsRequest
@@ -134,7 +135,8 @@ if __name__ == "__main__":
 
     # ---- 2. BUY: only on a fresh signal, within budget ----
     if daily_loss_hit(trading_client.get_account(), DAILY_LOSS_LIMIT):
-        raise SystemExit(f"Account down {DAILY_LOSS_LIMIT:.0%}+ today, no new buys.")
+        print(f"Account down {DAILY_LOSS_LIMIT:.0%}+ today, no new buys.")
+        sys.exit(0)                                                   # ✅ normal stop, sells above already ran
 
     small_set = set(small)
     exposure = sum(float(p.market_value) for p in positions.values())

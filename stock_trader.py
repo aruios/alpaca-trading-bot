@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
@@ -109,8 +110,11 @@ def sell(position, why):
 
 
 if __name__ == "__main__":
-    if not trading_client.get_clock().is_open:                        # ✅ avoid queued off-hours orders
-        raise SystemExit("Market closed. Run between 6:30 AM and 1:00 PM PT on weekdays.")
+    clock = trading_client.get_clock()
+    if not clock.is_open:                                             # ✅ avoid queued off-hours orders
+        print(f"Market closed, nothing to do. Next open: {clock.next_open} "
+              "(regular hours are 9:30 AM to 4:00 PM ET, weekdays).")
+        sys.exit(0)                                                   # ✅ normal stop, not a failed run
 
     universe = get_tradable(WATCHLIST or get_trending(TRENDING_TOP))
     positions = stock_positions()
@@ -129,7 +133,8 @@ if __name__ == "__main__":
 
     # ---- 2. BUY: only on a fresh signal, within budget ----
     if daily_loss_hit(trading_client.get_account(), DAILY_LOSS_LIMIT):
-        raise SystemExit(f"Account down {DAILY_LOSS_LIMIT:.0%}+ today, no new buys.")
+        print(f"Account down {DAILY_LOSS_LIMIT:.0%}+ today, no new buys.")
+        sys.exit(0)                                                   # ✅ normal stop, sells above already ran
 
     exposure = sum(float(p.market_value) for p in positions.values())
     candidates = []
