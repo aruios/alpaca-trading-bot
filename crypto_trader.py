@@ -84,7 +84,7 @@ def get_signals(symbols):
     for s in symbols:
         candles = closed_candles(bars.get(s, []), RULES.candle_minutes)
         if candles:
-            signals[s] = evaluate([b.close for b in candles], RULES)
+            signals[s] = evaluate(candles, RULES)
         else:
             print(f"No candles for {s}, skipped")
     return signals

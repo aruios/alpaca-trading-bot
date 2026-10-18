@@ -32,7 +32,8 @@ TRENDING_TOP = 15             # ✅ gainers to scan; candles decide which (if an
 DAILY_LOSS_LIMIT = 0.03       # ✅ no new buys if account is down 3% today
 LOOKBACK_DAYS = 30            # ✅ ~6.5 hourly candles per trading day, need 50+
 FEED = DataFeed.IEX           # ✅ free data plan; use DataFeed.SIP if you pay for it
-RULES = Rules(stop_loss=0.07, take_profit=0.10, candle_minutes=60)
+RULES = Rules(stop_loss=0.07, take_profit=0.10, candle_minutes=60,
+              vwap_tz="America/New_York")   # ✅ VWAP restarts each NY trading day
 DONT_MANAGE = set()           # ✅ stocks the bot must never sell, e.g. {"SPY"} if bot.py owns it
 
 
@@ -77,7 +78,7 @@ def get_signals(symbols):
     for s in symbols:
         candles = closed_candles(bars.get(s, []), RULES.candle_minutes)
         if candles:
-            signals[s] = evaluate([b.close for b in candles], RULES)
+            signals[s] = evaluate(candles, RULES)
         else:
             print(f"No candles for {s}, skipped")
     return signals
