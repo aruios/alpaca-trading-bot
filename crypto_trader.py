@@ -29,7 +29,8 @@ SMALL_COIN_MAX_PRICE = 1.00          # ✅ "small coin" = last close at or below
 DAILY_LOSS_LIMIT = 0.03              # ✅ no new buys if account is down 3% today
 LOOKBACK_DAYS = 5                    # ✅ 5 days of 30-minute candles = ~240 candles
 CANDLE = TimeFrame(30, TimeFrameUnit.Minute)                          # ✅ 30-minute candles
-RULES = Rules(stop_loss=0.10, take_profit=0.15, candle_minutes=30)   # ✅ crypto swings more
+RULES = Rules(take_profit=0.15, candle_minutes=30,
+              sell_at_loss=False)                                      # ✅ crypto: only sell in profit
 
 WATCHLIST = [
     "BTC/USD", "ETH/USD", "SOL/USD",   # ✅ core holdings

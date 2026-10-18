@@ -9,6 +9,9 @@ Sell (any one is enough):
   1. Stop-loss:    position is down STOP_LOSS or more from your entry price
   2. Take-profit:  position is up TAKE_PROFIT or more
   3. Signal exit:  fast EMA drops below slow EMA, or close falls below the trend SMA
+
+With sell_at_loss=False (crypto), 1 is skipped and 3 only fires while the
+position is in profit, so a losing position is held until it turns positive.
 """
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -25,6 +28,7 @@ class Rules:
     stop_loss: float = 0.07        # ✅ 0.07 = sell at -7%
     take_profit: float = 0.10      # ✅ 0.10 = sell at +10%
     candle_minutes: int = 60       # ✅ 60 = hourly candles
+    sell_at_loss: bool = True      # ✅ False = never sell below entry; hold until in profit
 
 
 # ---------- indicators (plain Python, no pandas needed) ----------
@@ -114,10 +118,12 @@ def evaluate(closes, r: Rules) -> Signal:
 def exit_reason(position, signal: Signal, r: Rules):
     """Return why to sell this position, or None to keep holding."""
     pl = float(position.unrealized_plpc)                     # ✅ e.g. -0.07 = -7%
-    if pl <= -r.stop_loss:
+    if pl <= -r.stop_loss and r.sell_at_loss:
         return f"stop-loss ({pl:+.1%})"
     if pl >= r.take_profit:
         return f"take-profit ({pl:+.1%})"
+    if pl <= 0 and not r.sell_at_loss:
+        return None                                          # ✅ in loss: hold, wait for profit
     if signal is not None and signal.sell:
         return f"signal exit ({pl:+.1%}; {signal.reason})"
     return None
