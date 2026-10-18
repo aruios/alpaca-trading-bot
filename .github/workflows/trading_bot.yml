@@ -2,7 +2,7 @@ name: Trading Bots
 
 on:
   schedule:
-    - cron: "5 * * * *"           # crypto: every hour, 5 min after the candle closes
+    - cron: "2,32 * * * *"        # crypto: every 30 min, just after each 30-minute candle closes
     - cron: "5 14-20 * * 1-5"     # stocks: hourly in US market hours (UTC); script skips if closed
   workflow_dispatch:              # run by hand from the Actions tab
 
@@ -16,7 +16,7 @@ env:
 
 jobs:
   crypto:
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '5 * * * *'
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '2,32 * * * *'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
