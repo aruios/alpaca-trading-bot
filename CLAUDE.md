@@ -18,7 +18,7 @@ Rule-based bot that trades crypto and US stocks on an Alpaca **paper** account
 ## Files
 - `strategy.py` - shared indicators (EMA, SMA, RSI, ADX, VWAP), `Rules`, buy/sell logic.
 - `crypto_trader.py` - crypto, 30-minute candles, main + small-coin watchlists and budgets.
-- `stock_trader.py` - stocks, hourly candles, scans top gainers unless `WATCHLIST` is set.
+- `stock_trader.py` - stocks, hourly candles, checks `WATCHLIST` plus today's top gainers.
 - `chart.py` - saves `charts/<SYMBOL>.png`: candles, EMA 9 blue, EMA 21 black,
   VWAP purple, ADX red (own panel). Uses the same indicator code as the bot.
 - `dashboard/app.py` - read-only Streamlit dashboard (Streamlit Community Cloud, own

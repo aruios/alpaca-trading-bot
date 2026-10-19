@@ -42,7 +42,7 @@ so a half-formed candle never triggers a trade) and checks these rules (`strateg
 ### What it watches
 - **Crypto main:** BTC, ETH, SOL, AAVE, ZEC, XMR, SUI, QNT, INJ
 - **Crypto small coins:** DOGE, SHIB, PEPE, BONK, WIF, ADA, ARB, POL, ONDO, GRT, BAT, CRV, XTZ, SUSHI, TIA, RSR, BTW
-- **Stocks:** today's top 15 % gainers (or set `WATCHLIST` in `stock_trader.py`)
+- **Stocks:** NVDA, MU, SPCX, COST, ORCL, MSTR, CRWV (`WATCHLIST` in `stock_trader.py`) **plus** today's top 15 % gainers
 
 Coins Alpaca doesn't list are skipped automatically and named in the log
 (currently ZEC, XMR, SUI, QNT, INJ, TIA, RSR, BTW).

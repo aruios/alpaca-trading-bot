@@ -92,7 +92,7 @@ def crypto_universe():
 
 @st.cache_data(ttl=300)
 def stock_universe():
-    return stk.get_tradable(stk.WATCHLIST or stk.get_trending(stk.TRENDING_TOP))
+    return stk.get_tradable(list(dict.fromkeys(stk.WATCHLIST + stk.get_trending(stk.TRENDING_TOP))))
 
 
 @st.cache_data(ttl=60)
@@ -432,7 +432,7 @@ def page():
         st.subheader("Crypto")
         signals_table(main + small, signals, held, small_set)
         st.subheader("Stocks")
-        st.caption("Today's top gainers (or your WATCHLIST); the bot only trades in market hours.")
+        st.caption("Your WATCHLIST plus today's top gainers; the bot only trades in market hours.")
         signals_table(stocks, signals, held, small_set)
     with tabs[2]:
         options = list(dict.fromkeys(sorted(held) + main + small + stocks))

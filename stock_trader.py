@@ -26,7 +26,12 @@ data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 # 3. Config
 BUDGET_USD = 4000             # ✅ max total stock exposure (crypto 6,000 + stocks 4,000 = $10,000 account)
 TRADE_USD = 500               # ✅ $ per buy
-WATCHLIST = []                # ✅ e.g. ["NVDA", "AAPL"]; empty = scan today's top gainers
+WATCHLIST = [                 # ✅ always checked, on top of today's top gainers
+    "NVDA", "MU",                       # ✅ news 2026-10: AI / semiconductor and memory activity
+    "SPCX",                             # ✅ news 2026-10: trending ahead of October earnings
+    "COST", "ORCL", "MSTR",             # ✅ news 2026-10: active movers (COST +1.1%, ORCL -4.6%, MSTR -9.6%)
+    "CRWV",                             # ✅ news 2026-10: rebound after Goldman Sachs upgrade
+]
 MIN_STOCK_PRICE = 5.0         # ✅ skip penny stocks
 TRENDING_TOP = 15             # ✅ gainers to scan; candles decide which (if any) to buy
 DAILY_LOSS_LIMIT = 0.03       # ✅ no new buys if account is down 3% today
@@ -117,7 +122,7 @@ if __name__ == "__main__":
               "(regular hours are 9:30 AM to 4:00 PM ET, weekdays).")
         sys.exit(0)                                                   # ✅ normal stop, not a failed run
 
-    universe = get_tradable(WATCHLIST or get_trending(TRENDING_TOP))
+    universe = get_tradable(list(dict.fromkeys(WATCHLIST + get_trending(TRENDING_TOP))))
     positions = stock_positions()
     signals = get_signals(sorted(set(universe) | set(positions)))
 
