@@ -24,8 +24,8 @@ screener = ScreenerClient(API_KEY, SECRET_KEY)
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # 3. Config
-BUDGET_USD = 400              # ✅ max total stock exposure (crypto 600 + stocks 400 = $1,000 account)
-TRADE_USD = 100               # ✅ $ per buy
+BUDGET_USD = 4000             # ✅ max total stock exposure (crypto 6,000 + stocks 4,000 = $10,000 account)
+TRADE_USD = 500               # ✅ $ per buy
 WATCHLIST = []                # ✅ e.g. ["NVDA", "AAPL"]; empty = scan today's top gainers
 MIN_STOCK_PRICE = 5.0         # ✅ skip penny stocks
 TRENDING_TOP = 15             # ✅ gainers to scan; candles decide which (if any) to buy

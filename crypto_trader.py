@@ -21,10 +21,10 @@ trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
 data_client = CryptoHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # 3. Config
-BUDGET_USD = 600                     # ✅ max total crypto exposure (paper account is $1,000)
-MAIN_TRADE_USD = 150                 # ✅ $ per buy for main coins
-SMALL_TRADE_USD = 50                 # ✅ $ per buy for coins under $1
-SMALL_COIN_BUDGET_USD = 150          # ✅ max total exposure to small coins
+BUDGET_USD = 6000                    # ✅ max total crypto exposure (paper account is $10,000)
+MAIN_TRADE_USD = 750                 # ✅ $ per buy for main coins
+SMALL_TRADE_USD = 250                # ✅ $ per buy for coins under $1
+SMALL_COIN_BUDGET_USD = 1500         # ✅ max total exposure to small coins
 SMALL_COIN_MAX_PRICE = 1.00          # ✅ "small coin" = last close at or below this
 DAILY_LOSS_LIMIT = 0.03              # ✅ no new buys if account is down 3% today
 LOOKBACK_DAYS = 5                    # ✅ 5 days of 30-minute candles = ~240 candles
@@ -38,6 +38,7 @@ WATCHLIST = [
     "AAVE/USD",                        # ✅ news 2026-10: early-October rally, DeFi leader
     "SUI/USD",                         # ✅ news 2026-10: Hashi lets BTC be used as collateral
     "QNT/USD",                         # ✅ news 2026-09: picked by The Clearing House for tokenized deposits
+    "INJ/USD",                         # ✅ news 2026-10: up ~25% this week
 ]                                      # ✅ get_tradable() drops any Alpaca doesn't list
 
 # ✅ Small coins: candidates usually under $1. Price is checked every run,
@@ -45,7 +46,9 @@ WATCHLIST = [
 SMALL_COIN_WATCHLIST = [
     "DOGE/USD", "SHIB/USD", "PEPE/USD", "BONK/USD", "WIF/USD",   # ✅ meme coins (very volatile)
     "ADA/USD", "ARB/USD", "POL/USD", "ONDO/USD",                 # ✅ added by Alpaca May 2026
-    "GRT/USD", "BAT/USD", "CRV/USD", "XTZ/USD", "SUSHI/USD",     # ✅ older Alpaca listings
+    "GRT/USD", "BAT/USD", "CRV/USD", "XTZ/USD", "SUSHI/USD",     # ✅ older Alpaca listings (BAT up ~46-49% this week)
+    "TIA/USD", "RSR/USD",                                        # ✅ news 2026-10: TIA +57% to ~$0.75, RSR +20-30%
+    "BTW/USD",                                                   # ✅ news 2026-10: ~+50%, but thin volume
 ]
 
 
