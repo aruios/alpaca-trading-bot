@@ -47,10 +47,13 @@ def heartbeat():
 
 
 def pull():
+    # ✅ this clone is only for the runner, so always match GitHub main exactly
     r = sh("git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential",
-           "pull", "--ff-only", "-q", f"https://github.com/{REPO}.git", "main")
+           "fetch", "-q", f"https://github.com/{REPO}.git", "main")
+    if r.returncode == 0:
+        r = sh("git", "reset", "-q", "--hard", "FETCH_HEAD")
     if r.returncode:
-        log(f"WARNING git pull failed, running local code: {r.stderr.strip()}")
+        log(f"WARNING git update failed, running local code: {r.stderr.strip()}")
 
 
 def run(script):
