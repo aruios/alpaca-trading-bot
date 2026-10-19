@@ -6,6 +6,10 @@ Rule-based bot that trades crypto and US stocks on an Alpaca **paper** account
 ## How it runs
 - `.github/workflows/trading_bot.yml` runs from **`main`** on GitHub Actions:
   `crypto_trader.py` every 30 min (`:02`, `:32`), `stock_trader.py` hourly in US market hours.
+- `runner.py` (installed by `mac/install.sh` as a launch agent) runs the same scripts on the
+  owner's Mac on time while it is on, pulling `main` first. After each successful run it sets the
+  `MAC_HEARTBEAT` repo variable; scheduled Actions runs skip while it is < 45 min old, so the Mac
+  and GitHub never both trade. Manual "Run workflow" always runs. Logs in `logs/`.
 - A change only affects trading once it is merged to `main`. Work on a branch / PR.
 - Alpaca keys come from `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` (GitHub Secrets in CI,
   `.env` locally). Never commit keys.

@@ -19,22 +19,48 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '2,32 * * * *'
     runs-on: ubuntu-latest
     steps:
+      - id: mac                   # skip while the Mac runner (runner.py) is active
+        if: github.event_name == 'schedule'
+        run: |
+          beat="${{ vars.MAC_HEARTBEAT }}"
+          age=$(( $(date +%s) - ${beat:-0} ))
+          if [ -n "$beat" ] && [ "$age" -lt 2700 ]; then
+            echo "Mac runner ran ${age}s ago, skipping (GitHub takes over after 45 min of silence)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.mac.outputs.skip != 'true'
       - uses: actions/setup-python@v5
+        if: steps.mac.outputs.skip != 'true'
         with:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+        if: steps.mac.outputs.skip != 'true'
       - run: python crypto_trader.py
+        if: steps.mac.outputs.skip != 'true'
 
   stocks:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '5 14-20 * * 1-5'
     runs-on: ubuntu-latest
     steps:
+      - id: mac                   # skip while the Mac runner (runner.py) is active
+        if: github.event_name == 'schedule'
+        run: |
+          beat="${{ vars.MAC_HEARTBEAT }}"
+          age=$(( $(date +%s) - ${beat:-0} ))
+          if [ -n "$beat" ] && [ "$age" -lt 2700 ]; then
+            echo "Mac runner ran ${age}s ago, skipping (GitHub takes over after 45 min of silence)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.mac.outputs.skip != 'true'
       - uses: actions/setup-python@v5
+        if: steps.mac.outputs.skip != 'true'
         with:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+        if: steps.mac.outputs.skip != 'true'
       - run: python stock_trader.py
+        if: steps.mac.outputs.skip != 'true'
