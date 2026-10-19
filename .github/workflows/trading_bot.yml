@@ -28,9 +28,9 @@ jobs:
             echo "Mac runner ran ${age}s ago, skipping (GitHub takes over after 45 min of silence)."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.mac.outputs.skip != 'true'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: steps.mac.outputs.skip != 'true'
         with:
           python-version: "3.12"
@@ -53,9 +53,9 @@ jobs:
             echo "Mac runner ran ${age}s ago, skipping (GitHub takes over after 45 min of silence)."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.mac.outputs.skip != 'true'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: steps.mac.outputs.skip != 'true'
         with:
           python-version: "3.12"
