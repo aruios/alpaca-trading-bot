@@ -21,10 +21,10 @@ trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
 data_client = CryptoHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # 3. Config
-BUDGET_USD = 5000                    # ✅ max total crypto exposure (paper)
-MAIN_TRADE_USD = 800                 # ✅ $ per buy for main coins
-SMALL_TRADE_USD = 200                # ✅ $ per buy for coins under $1
-SMALL_COIN_BUDGET_USD = 1000         # ✅ max total exposure to small coins
+BUDGET_USD = 600                     # ✅ max total crypto exposure (paper account is $1,000)
+MAIN_TRADE_USD = 150                 # ✅ $ per buy for main coins
+SMALL_TRADE_USD = 50                 # ✅ $ per buy for coins under $1
+SMALL_COIN_BUDGET_USD = 150          # ✅ max total exposure to small coins
 SMALL_COIN_MAX_PRICE = 1.00          # ✅ "small coin" = last close at or below this
 DAILY_LOSS_LIMIT = 0.03              # ✅ no new buys if account is down 3% today
 LOOKBACK_DAYS = 5                    # ✅ 5 days of 30-minute candles = ~240 candles
