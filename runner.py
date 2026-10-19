@@ -9,8 +9,8 @@ its scheduled runs while the heartbeat is under 45 min old, and takes over again
 Mac is off, asleep, or its runs keep failing.
 
 Start:  mac/install.sh  (launch agent, starts at login, keeps the Mac awake)
-Once:   .venv/bin/python runner.py --once
-Logs:   logs/YYYY-MM-DD.log
+Once:   ~/.alpaca-trading-bot/.venv/bin/python ~/.alpaca-trading-bot/runner.py --once
+Logs:   ~/.alpaca-trading-bot/logs/YYYY-MM-DD.log (the runner's own clone)
 """
 import os
 import subprocess
