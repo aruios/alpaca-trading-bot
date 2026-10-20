@@ -34,6 +34,8 @@ Sell:
 - **Crypto never sells at a loss** (`sell_at_loss=False`): no stop-loss; a losing
   position is held until it is in profit. Then it sells at +15% take-profit, or on the
   signal exit (EMA 9 below EMA 21, or close below SMA 50).
+  The +15% is a standing GTC limit sell at Alpaca (client_order_id prefix `tp-`), kept in sync
+  each run by `sync_take_profits()`; `sell()` cancels it before closing a position.
 - Stocks: -7% stop-loss, +10% take-profit, or the signal exit.
 
 No new buys when the account is down 3% on the day. No double-buys of a held symbol.

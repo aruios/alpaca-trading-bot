@@ -24,7 +24,7 @@ so a half-formed candle never triggers a trade) and checks these rules (`strateg
 ### Sell: any one is enough
 | | Crypto (30-min candles) | Stocks (1-hour candles) |
 |---|---|---|
-| Take-profit | +15% | +10% |
+| Take-profit | +15%: a **standing limit sell at Alpaca**, filled the moment price touches it, 24/7, even with the Mac off | +10% (checked each run) |
 | Signal exit (EMA 9 < EMA 21, or close < SMA 50) | **only while in profit** | yes |
 | Stop-loss | **none: never sells at a loss**, holds until positive | −7% |
 
@@ -36,7 +36,8 @@ so a half-formed candle never triggers a trade) and checks these rules (`strateg
 | Other | small coins capped at $1,500 in total | skips stocks under $5 |
 
 - No new buys when the account is down **3%** on the day (sells still run).
-- Never buys a symbol it already holds, never re-buys one it just sold in the same run.
+- Never buys a symbol it already holds or has an unfilled buy order for, never re-buys one it just sold in the same run.
+- Crypto take-profit orders are re-checked every run: one per position, replaced if the quantity or entry price changes, cancelled when the position is sold.
 - Strongest trends are bought first while budget remains.
 
 ### What it watches

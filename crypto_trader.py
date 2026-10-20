@@ -1,10 +1,14 @@
 from dotenv import load_dotenv
 import os
+import math
 import sys
+import time
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 from datetime import datetime, timedelta, timezone
 from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import MarketOrderRequest, GetAssetsRequest
-from alpaca.trading.enums import OrderSide, TimeInForce, AssetClass, AssetStatus
+from alpaca.trading.requests import (MarketOrderRequest, LimitOrderRequest, GetAssetsRequest,
+                                     GetOrdersRequest)
+from alpaca.trading.enums import OrderSide, TimeInForce, AssetClass, AssetStatus, QueryOrderStatus
 from alpaca.data.historical.crypto import CryptoHistoricalDataClient
 from alpaca.data.requests import CryptoBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
@@ -93,6 +97,78 @@ def get_signals(symbols):
     return signals
 
 
+# ---------- standing take-profit orders (Alpaca watches the price 24/7) ----------
+
+TP_PREFIX = "tp-"                    # ✅ client_order_id prefix that marks our take-profit sells
+
+
+def open_orders():
+    """Open crypto orders by pair: (pending buys, our take-profit sells)."""
+    buys, tps = {}, {}
+    for o in trading_client.get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, limit=500)):
+        if o.asset_class != AssetClass.CRYPTO:
+            continue
+        sym = to_pair(o.symbol)
+        if o.side == OrderSide.BUY:
+            buys.setdefault(sym, []).append(o)
+        elif (o.client_order_id or "").startswith(TP_PREFIX):
+            tps.setdefault(sym, []).append(o)
+    return buys, tps
+
+
+def to_step(value, step, up):
+    """Round value to a multiple of step (up for the sell price, down for qty)."""
+    step = Decimal(str(step or "0.000000001"))
+    exact = (Decimal(str(value)) / step).to_integral_value(rounding=ROUND_CEILING if up else ROUND_FLOOR) * step
+    out = float(exact)
+    if not up and Decimal(out) > exact:                               # ✅ float rounded up: never sell more than held
+        out = math.nextafter(out, 0)
+    return out
+
+
+def cancel_take_profits(orders):
+    for o in orders:
+        try:
+            trading_client.cancel_order_by_id(o.id)
+        except Exception as e:
+            print(f"Cancel failed for {to_pair(o.symbol)} take-profit: {e}")
+
+
+def place_take_profit(sym, position):
+    asset = trading_client.get_asset(sym)
+    qty = to_step(position.qty, asset.min_trade_increment, up=False)
+    price = to_step(float(position.avg_entry_price) * (1 + RULES.take_profit), asset.price_increment, up=True)
+    try:
+        trading_client.submit_order(order_data=LimitOrderRequest(
+            symbol=sym, qty=qty, limit_price=price, side=OrderSide.SELL,
+            time_in_force=TimeInForce.GTC,                            # ✅ stays open until it fills
+            client_order_id=f"{TP_PREFIX}{sym.replace('/', '')}-{int(time.time())}",
+        ))
+        print(f"TP   {sym} sell {qty:g} @ {price:.10g} (+{RULES.take_profit:.0%}), open until filled")
+    except Exception as e:
+        print(f"Take-profit order failed for {sym}: {e}")
+
+
+def sync_take_profits():
+    """Every crypto position gets exactly one +TAKE_PROFIT limit sell for its full qty."""
+    positions = crypto_positions()
+    _, tps = open_orders()
+    for sym, p in positions.items():
+        target = float(p.avg_entry_price) * (1 + RULES.take_profit)
+        orders = tps.pop(sym, [])
+        ok = (len(orders) == 1
+              and abs(float(orders[0].qty) / float(p.qty) - 1) < 1e-6
+              and abs(float(orders[0].limit_price) / target - 1) < 0.001)
+        if ok:
+            continue
+        if orders:                                                    # ✅ qty or entry changed: replace it
+            cancel_take_profits(orders)
+            time.sleep(1)
+        place_take_profit(sym, p)
+    for orders in tps.values():                                       # ✅ position gone: clean up leftovers
+        cancel_take_profits(orders)
+
+
 def buy(symbol, usd):
     order_data = MarketOrderRequest(
         symbol=symbol,
@@ -109,7 +185,10 @@ def buy(symbol, usd):
         return False
 
 
-def sell(position, why):
+def sell(position, why, tp_orders=()):
+    if tp_orders:                                                     # ✅ free the qty the take-profit holds
+        cancel_take_profits(tp_orders)
+        time.sleep(1)
     try:
         trading_client.close_position(position.symbol)                # ✅ sells the full position
         print(f"SELL {to_pair(position.symbol)} ${float(position.market_value):.2f}: {why}")
@@ -123,6 +202,7 @@ if __name__ == "__main__":
     main = get_tradable(WATCHLIST)
     small = [c for c in get_tradable(SMALL_COIN_WATCHLIST) if c not in main]
     positions = crypto_positions()
+    pending_buys, tp_orders = open_orders()
 
     # ✅ Get candles for everything we might buy AND everything we hold
     signals = get_signals(sorted(set(main) | set(small) | set(positions)))
@@ -131,7 +211,7 @@ if __name__ == "__main__":
     sold = set()
     for sym, p in positions.items():
         why = exit_reason(p, signals.get(sym), RULES)
-        if why and sell(p, why):
+        if why and sell(p, why, tp_orders.get(sym, ())):
             sold.add(sym)
         elif not why:
             print(f"HOLD {sym} ({float(p.unrealized_plpc):+.1%})")
@@ -141,16 +221,21 @@ if __name__ == "__main__":
     # ---- 2. BUY: only on a fresh signal, within budget ----
     if daily_loss_hit(trading_client.get_account(), DAILY_LOSS_LIMIT):
         print(f"Account down {DAILY_LOSS_LIMIT:.0%}+ today, no new buys.")
+        sync_take_profits()
         sys.exit(0)                                                   # ✅ normal stop, sells above already ran
 
     small_set = set(small)
-    exposure = sum(float(p.market_value) for p in positions.values())
-    small_exposure = sum(float(p.market_value) for s, p in positions.items() if s in small_set)
+    pending = {s: sum(float(o.notional or 0) for o in orders) for s, orders in pending_buys.items()}
+    exposure = sum(float(p.market_value) for p in positions.values()) + sum(pending.values())
+    small_exposure = (sum(float(p.market_value) for s, p in positions.items() if s in small_set)
+                      + sum(v for s, v in pending.items() if s in small_set))
+    for sym in pending:
+        print(f"PENDING {sym}: unfilled buy order(s) ${pending[sym]:.2f}, not buying again")
 
     candidates = []
     for sym in main + small:
         sig = signals.get(sym)
-        if sym in positions or sym in sold or sig is None:            # ✅ no double-buys, no instant re-buy
+        if sym in positions or sym in sold or sym in pending or sig is None:  # ✅ no double-buys, no instant re-buy
             continue
         print(f"{'BUY? ' if sig.buy else 'wait '} {sym}: {sig.reason}")
         if not sig.buy:
@@ -174,3 +259,7 @@ if __name__ == "__main__":
             small_exposure += usd if is_small else 0
 
     print(f"Crypto exposure after run: ${exposure:.2f} of ${BUDGET_USD}")
+
+    # ---- 3. TAKE-PROFIT: a standing +15% sell on every position ----
+    time.sleep(3)                                                     # ✅ let new market buys fill
+    sync_take_profits()
