@@ -39,10 +39,30 @@ if not os.getenv("ALPACA_API_KEY"):
     st.error("Add ALPACA_API_KEY and ALPACA_SECRET_KEY to the app's secrets (or .env locally).")
     st.stop()
 
-import crypto_trader as ct                                    # noqa: E402  (needs keys set first)
-import stock_trader as stk                                    # noqa: E402
-import top_crypto_rotator as rot                              # noqa: E402
-from strategy import ema, vwap, adx, exit_reason, closed_candles  # noqa: E402
+import importlib                                              # noqa: E402
+
+
+BOT_MODULES = ["strategy", "crypto_trader", "stock_trader", "top_crypto_rotator"]  # ✅ dependency order
+
+
+def load_bot_modules():
+    """Import the bot modules, reloading all of them when any file changed. Streamlit reruns this
+    page on a push but keeps modules from the parent folder cached, so new code would mix with old."""
+    mtimes = {n: os.path.getmtime(os.path.join(ROOT, n + ".py")) for n in BOT_MODULES}
+    if all(getattr(sys.modules.get(n), "_mtime", None) == mtimes[n] for n in BOT_MODULES):
+        return [sys.modules[n] for n in BOT_MODULES]
+    mods = []
+    for n in BOT_MODULES:
+        mod = importlib.reload(sys.modules[n]) if n in sys.modules else importlib.import_module(n)
+        mod._mtime = mtimes[n]
+        mods.append(mod)
+    st.cache_data.clear()                                     # ✅ cached results came from the old code
+    return mods
+
+
+strategy, ct, stk, rot = load_bot_modules()                   # (needs keys set first)
+ema, vwap, adx, exit_reason, closed_candles = (strategy.ema, strategy.vwap, strategy.adx,
+                                               strategy.exit_reason, strategy.closed_candles)
 from alpaca.trading.requests import GetOrdersRequest          # noqa: E402
 from alpaca.trading.enums import QueryOrderStatus, AssetClass  # noqa: E402
 from alpaca.data.requests import CryptoBarsRequest, StockBarsRequest  # noqa: E402
