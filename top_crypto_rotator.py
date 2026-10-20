@@ -4,9 +4,10 @@ Each run: rank liquid USD crypto pairs (stablecoins excluded) by today's % chang
 and hold only the #1 performer, in one position of up to BUDGET_USD.
 
 Rules
-  Buy:     leader is up at least MIN_GAIN_PCT today, not a coin crypto_trader.py holds.
+  Buy:     the best coin up at least MIN_GAIN_PCT today whose 30-minute chart confirms the move
+           (EMA 9 > EMA 21, close > today's VWAP, RSI 14 < RSI_MAX), not a coin crypto_trader.py holds.
   Profit:  standing GTC limit sell at entry +TAKE_PROFIT_PCT (Alpaca fills it 24/7).
-  Rotate:  a new leader beats the held coin by SWITCH_MARGIN, and the held coin is up > MIN_ROTATE_PROFIT_PCT.
+  Rotate:  that pick beats the held coin by SWITCH_MARGIN today, and the held coin is up > MIN_ROTATE_PROFIT_PCT.
   Loss:    never sells below entry (owner's crypto rule); a loser is held until positive.
   Daily:   account down MAX_DAILY_LOSS today -> no new buys (nothing is sold).
 
@@ -19,12 +20,13 @@ from datetime import datetime, timedelta, timezone
 
 from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest, GetAssetsRequest
 from alpaca.trading.enums import AssetClass, AssetStatus, OrderSide, TimeInForce
-from alpaca.data.requests import CryptoSnapshotRequest
+from alpaca.data.requests import CryptoSnapshotRequest, CryptoBarsRequest
 
-from crypto_trader import (trading_client as trading, data_client as data, ROT_PREFIX,
+from crypto_trader import (trading_client as trading, data_client as data, ROT_PREFIX, CANDLE,
+                           RULES as CHART_RULES,
                            to_pair, to_step, crypto_positions, rotator_holding, open_orders,
                            cancel_take_profits)
-from strategy import daily_loss_hit
+from strategy import daily_loss_hit, closed_candles, ema, rsi, vwap
 
 # ---------- config ----------
 BUDGET_USD       = 2000      # ✅ one position of up to this much (extra on top of the $10k cap)
@@ -35,6 +37,8 @@ MIN_GAIN_PCT     = 2.0       # ✅ only buy if leader is up at least this much t
 SWITCH_MARGIN    = 1.5       # ✅ new leader must beat current by this % (avoids churn)
 TAKE_PROFIT_PCT  = 8.0
 MIN_ROTATE_PROFIT_PCT = 0.75 # ✅ rotate only above this: covers ~0.25% fee each way + spread
+RSI_MAX          = 70        # ✅ chart check: skip a leader that is already overbought
+CHART_DAYS       = 3         # ✅ 30-minute candles to load for the chart check (~144)
 MAX_DAILY_LOSS   = 0.03      # ✅ no new buys if equity is down 3% today
 STALE_BUY_MINUTES = 30       # ✅ cancel a rotator buy still unfilled after this long
 RTP_PREFIX       = "rtp-"    # ✅ client_order_id prefix of the rotator's take-profit sells
@@ -62,6 +66,32 @@ def rank_today(symbols):
             continue
         rows.append((sym, (price / open_ - 1) * 100, price))
     return sorted(rows, key=lambda r: r[1], reverse=True)
+
+
+def chart_checks(symbols):
+    """{symbol: (ok, reason)}: is the move still going on the 30-minute chart?"""
+    if not symbols:
+        return {}
+    bars = data.get_crypto_bars(CryptoBarsRequest(
+        symbol_or_symbols=symbols, timeframe=CANDLE,
+        start=datetime.now(timezone.utc) - timedelta(days=CHART_DAYS))).data
+    out = {}
+    for sym in symbols:
+        candles = closed_candles(bars.get(sym, []), CHART_RULES.candle_minutes)
+        closes = [b.close for b in candles]
+        if len(closes) < CHART_RULES.ema_slow + 1:
+            out[sym] = (False, f"only {len(closes)} candles")
+            continue
+        fast = ema(closes, CHART_RULES.ema_fast)[-1]
+        slow = ema(closes, CHART_RULES.ema_slow)[-1]
+        rsi_now = rsi(closes, CHART_RULES.rsi_period)
+        vw = vwap(candles, CHART_RULES.vwap_tz)[-1]
+        checks = [(fast > slow, f"ema{CHART_RULES.ema_fast}{'>' if fast > slow else '<'}ema{CHART_RULES.ema_slow}"),
+                  (vw is not None and closes[-1] > vw, f"{'above' if vw and closes[-1] > vw else 'below'} vwap"),
+                  (rsi_now is not None and rsi_now < RSI_MAX, f"rsi {rsi_now:.0f}" if rsi_now else "rsi n/a")]
+        out[sym] = (all(ok for ok, _ in checks),
+                    ", ".join(("✓ " if ok else "✗ ") + text for ok, text in checks))
+    return out
 
 
 def rotator_orders():
@@ -149,7 +179,18 @@ def tick():
     candidates = [r for r in ranked if r[0] not in others]
     if not candidates:
         print("Every leader is already held by crypto_trader.py"); sync_take_profit(held_sym, tps); return
-    leader, leader_pct, leader_price = candidates[0]
+    # ✅ pick: best coin up >= MIN_GAIN_PCT today whose chart confirms the move
+    risers = [r for r in candidates if r[1] >= MIN_GAIN_PCT and r[0] != held_sym]
+    charts = chart_checks([s for s, _, _ in risers])
+    pick = None
+    for sym, pct, price in risers:
+        ok, why = charts[sym]
+        print(f"{'CHART ok' if ok else 'CHART no'} {sym} {pct:+.2f}%: {why}")
+        if ok:
+            pick = (sym, pct, price)
+            break
+    if not risers:
+        print(f"No coin up +{MIN_GAIN_PCT}% today besides the one held")
 
     # ✅ manage existing position first
     if held_sym:
@@ -157,23 +198,23 @@ def tick():
         pl = float(pos.unrealized_plpc) * 100
         held = next((r for r in ranked if r[0] == held_sym), None)
         held_pct = held[1] if held else -999
-        if leader != held_sym and leader_pct - held_pct >= SWITCH_MARGIN:
+        if pick and pick[1] - held_pct >= SWITCH_MARGIN:
             if pl > MIN_ROTATE_PROFIT_PCT:
-                sell_all(held_sym, pos, f"rotate to {leader}", tps)
+                sell_all(held_sym, pos, f"rotate to {pick[0]}", tps)
                 time.sleep(3)                             # ✅ let sell settle before buying
                 tps.pop(held_sym, None)
                 held_sym = None
             else:
-                print(f"HOLD {held_sym} ({pl:+.2f}%): {leader} leads, but rotating needs > +{MIN_ROTATE_PROFIT_PCT}% (no selling at a loss)")
+                print(f"HOLD {held_sym} ({pl:+.2f}%): {pick[0]} leads, but rotating needs > +{MIN_ROTATE_PROFIT_PCT}% (no selling at a loss)")
         else:
             print(f"HOLD {held_sym} ({pl:+.2f}%), today {held_pct:+.2f}%")
 
     if held_sym is None:
         if daily_loss_hit(trading.get_account(), MAX_DAILY_LOSS):
             print(f"Account down {MAX_DAILY_LOSS:.0%}+ today, no new buys.")
-        elif leader_pct < MIN_GAIN_PCT:
-            print(f"Leader {leader} {leader_pct:+.2f}% is under +{MIN_GAIN_PCT}%, not buying")
-        elif buy(leader, leader_price):
+        elif pick is None:
+            print("Nothing to buy: no riser with a confirming chart")
+        elif buy(pick[0], pick[2]):
             time.sleep(3)                                 # ✅ let the market buy fill
             held_sym = rotator_holding()
 

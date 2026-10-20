@@ -62,9 +62,9 @@ Every 15 minutes it ranks all liquid USD crypto pairs on Alpaca by today's % cha
 | Setting | Value |
 |---|---|
 | Budget | **$2,000** in one position (on top of the $10,000 above), never more than 20% of cash |
-| Buy | leader is up **≥ 2%** today, traded ≥ $10k on Alpaca yesterday, isn't a stablecoin, and isn't a coin `crypto_trader.py` holds |
+| Buy | the best coin up **≥ 2%** today whose **30-minute chart confirms the move**: EMA 9 > EMA 21, price above today's VWAP, RSI 14 < 70. Must have traded ≥ $10k on Alpaca yesterday, not be a stablecoin, and not be a coin `crypto_trader.py` holds. If the top riser fails the chart check, the next riser is tried. |
 | Take-profit | **+8%**, a standing limit sell at Alpaca (24/7) |
-| Rotate | a new leader beats the held coin by **≥ 1.5%** today, **and** the held coin is up **> +0.75%** |
+| Rotate | that pick beats the held coin by **≥ 1.5%** today, **and** the held coin is up **> +0.75%** |
 | Loss | **never sells below entry**; a losing coin is held until positive |
 | Daily loss | account down 3% today: no new buys (nothing sold) |
 | Stuck buy | a rotator buy unfilled for 30 min is cancelled |
