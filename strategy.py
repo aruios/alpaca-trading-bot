@@ -16,7 +16,7 @@ With sell_at_loss=False (crypto), 1 is skipped and 3 only fires above min_profit
 (crypto: +0.75%, covering Alpaca's ~0.25% fee each way and the spread), so a
 position is never sold below what it cost.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -136,7 +136,6 @@ class Signal:
     close: float
     strength: float      # ✅ % above trend SMA, used to rank buy candidates
     reason: str
-    checks: dict = field(default_factory=dict)   # ✅ each buy check: name -> (passed, value), for the dashboard
 
 
 def evaluate(candles, r: Rules) -> Signal:
@@ -170,14 +169,7 @@ def evaluate(candles, r: Rules) -> Signal:
               f"ema{r.ema_fast}{'>' if above_now else '<'}ema{r.ema_slow} "
               f"cross={'yes' if fresh_cross else 'no'} rsi={rsi_now:.1f} "
               f"adx={adx_now or 0:.1f} vwap={vwap_now or 0:.6g}")
-    checks = {
-        f"> SMA {r.trend_sma}": (uptrend, trend),
-        f"EMA {r.ema_fast}/{r.ema_slow} cross": (fresh_cross, fast[-1] - slow[-1]),
-        f"RSI < {r.rsi_max:g}": (rsi_now < r.rsi_max, rsi_now),
-        f"ADX ≥ {r.adx_min:g}": (strong, adx_now),
-        "> VWAP": (above_vwap, vwap_now),
-    }
-    return Signal(buy, sell, close, strength, reason, checks)
+    return Signal(buy, sell, close, strength, reason)
 
 
 def exit_reason(position, signal: Signal, r: Rules):

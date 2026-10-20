@@ -3,7 +3,7 @@
 A rule-based bot that trades **crypto** and **US stocks** on an Alpaca **paper** account
 (simulated money, `paper=True` everywhere). It reads candles, calculates indicators, and
 buys or sells on its own: on your Mac while it is on, and on GitHub Actions when it is not.
-A Streamlit dashboard lets you watch everything live.
+Watch positions, orders and P/L on the Alpaca paper dashboard; the bot's decisions are in the run logs.
 
 ---
 
@@ -109,29 +109,6 @@ Re-run `./mac/install.sh` after changing `.env`. Requires the GitHub CLI (`gh`) 
 
 ---
 
-## Dashboard (Streamlit): watch it live
-
-`dashboard/app.py` is **read-only**: it never places orders. Refreshes every minute.
-
-| Tab | Shows |
-|---|---|
-| Overview | equity, today's P/L, daily-loss stop, budget bars, next scheduled runs, positions with what the bot will do next run (e.g. "🔒 holding until in profit", "SELL next run: take-profit") |
-| Signals | every coin/stock with ✓/✗ and the value for each of the 5 buy checks |
-| Chart | interactive candles, EMA 9 blue, EMA 21 black, VWAP purple, ADX red, ▲▼ the bot's real buys/sells |
-| Activity | orders from the last 7 days |
-| Bot runs | each GitHub Actions run and what the bot printed (needs `GITHUB_TOKEN`) |
-
-**Deploy on Streamlit Community Cloud:** repo `aruios/alpaca-trading-bot`, branch `main`,
-main file `dashboard/app.py`, Python 3.12, secrets:
-```toml
-ALPACA_API_KEY = "PK..."
-ALPACA_SECRET_KEY = "..."
-GITHUB_TOKEN = "..."   # optional: fine-grained, this repo, Actions: Read-only
-```
-**Run locally:** `pip install -r dashboard/requirements.txt && streamlit run dashboard/app.py`
-
----
-
 ## Chart image: `chart.py`
 
 ```bash
@@ -153,7 +130,6 @@ Saves `charts/<SYMBOL>.png` with EMA 9 (blue), EMA 21 (black), VWAP (purple), AD
 | `stock_trader.py` | stock bot: budget, top-gainer scan, `RULES` |
 | `runner.py`, `mac/` | Mac runner and its install/uninstall scripts |
 | `.github/workflows/trading_bot.yml` | GitHub Actions schedule |
-| `dashboard/` | Streamlit dashboard and its own `requirements.txt` |
 | `chart.py` | saves a PNG chart |
 | `CLAUDE.md` | project notes for Claude sessions (e.g. on claude.ai/code) |
 | `.mcp.json` | Alpaca MCP server for Claude (paper; needs `uv` installed) |
