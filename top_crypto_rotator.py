@@ -1,6 +1,6 @@
 """
 Top-performer crypto rotator for Alpaca (paper). Does all new crypto buying.
-Each run: rank liquid USD crypto pairs by today's % change (since UTC midnight)
+Each run: rank liquid USD crypto pairs (stablecoins excluded) by today's % change (since UTC midnight)
 and hold only the #1 performer, in one position of up to BUDGET_USD.
 
 Rules
@@ -29,7 +29,8 @@ from strategy import daily_loss_hit
 # ---------- config ----------
 BUDGET_USD       = 2000      # ✅ one position of up to this much (extra on top of the $10k cap)
 ALLOC_PCT        = 0.20      # ✅ and never more than this % of cash
-MIN_DOLLAR_VOL   = 1_000_000 # ✅ skip illiquid coins (today's $ volume)
+MIN_DOLLAR_VOL   = 10_000    # ✅ skip illiquid coins (yesterday's $ volume on Alpaca, which is small)
+STABLECOINS      = {"USDC", "USDT", "USDG", "PAXG", "DAI", "PYUSD", "TUSD"}  # ✅ pegged, never "lead"
 MIN_GAIN_PCT     = 2.0       # ✅ only buy if leader is up at least this much today
 SWITCH_MARGIN    = 1.5       # ✅ new leader must beat current by this % (avoids churn)
 TAKE_PROFIT_PCT  = 8.0
@@ -41,7 +42,8 @@ RTP_PREFIX       = "rtp-"    # ✅ client_order_id prefix of the rotator's take-
 def usd_pairs():
     assets = trading.get_all_assets(
         GetAssetsRequest(asset_class=AssetClass.CRYPTO, status=AssetStatus.ACTIVE))
-    return [a.symbol for a in assets if a.tradable and a.symbol.endswith("/USD")]  # ✅ USD only
+    return [a.symbol for a in assets if a.tradable and a.symbol.endswith("/USD")  # ✅ USD only
+            and a.symbol.split("/")[0] not in STABLECOINS]
 
 
 def rank_today(symbols):
@@ -53,7 +55,8 @@ def rank_today(symbols):
             continue  # ✅ missing data -> skip, don't guess
         price = s.latest_trade.price
         open_ = s.daily_bar.open                          # day = UTC midnight
-        dollar_vol = s.daily_bar.volume * price
+        prev = s.previous_daily_bar                       # ✅ full day, so early-UTC hours aren't "illiquid"
+        dollar_vol = prev.volume * prev.close if prev else 0
         if open_ <= 0 or dollar_vol < MIN_DOLLAR_VOL:
             continue
         rows.append((sym, (price / open_ - 1) * 100, price))

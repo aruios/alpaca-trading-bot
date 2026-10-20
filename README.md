@@ -62,7 +62,7 @@ Every 15 minutes it ranks all liquid USD crypto pairs on Alpaca by today's % cha
 | Setting | Value |
 |---|---|
 | Budget | **$2,000** in one position (on top of the $10,000 above), never more than 20% of cash |
-| Buy | leader is up **≥ 2%** today, has ≥ $1M traded today, and isn't a coin `crypto_trader.py` holds |
+| Buy | leader is up **≥ 2%** today, traded ≥ $10k on Alpaca yesterday, isn't a stablecoin, and isn't a coin `crypto_trader.py` holds |
 | Take-profit | **+8%**, a standing limit sell at Alpaca (24/7) |
 | Rotate | a new leader beats the held coin by **≥ 1.5%** today, **and** the held coin is in profit |
 | Loss | **never sells below entry**; a losing coin is held until positive |
