@@ -29,7 +29,7 @@ so a half-formed candle never triggers a trade) and checks these rules (`strateg
 | | Crypto (30-min candles) | Stocks (1-hour candles) |
 |---|---|---|
 | Take-profit | +15%: a **standing limit sell at Alpaca**, filled the moment price touches it, 24/7, even with the Mac off | +10% (checked each run) |
-| Signal exit (EMA 9 < EMA 21, or close < SMA 50) | **only while in profit** | yes |
+| Signal exit (EMA 9 < EMA 21, or close < SMA 50) | **only above +0.75%** (covers Alpaca's ~0.25% fee each way + spread) | yes |
 | Stop-loss | **none: never sells at a loss**, holds until positive | −7% |
 
 ### Limits
@@ -64,7 +64,7 @@ Every 15 minutes it ranks all liquid USD crypto pairs on Alpaca by today's % cha
 | Budget | **$2,000** in one position (on top of the $10,000 above), never more than 20% of cash |
 | Buy | leader is up **≥ 2%** today, traded ≥ $10k on Alpaca yesterday, isn't a stablecoin, and isn't a coin `crypto_trader.py` holds |
 | Take-profit | **+8%**, a standing limit sell at Alpaca (24/7) |
-| Rotate | a new leader beats the held coin by **≥ 1.5%** today, **and** the held coin is in profit |
+| Rotate | a new leader beats the held coin by **≥ 1.5%** today, **and** the held coin is up **> +0.75%** |
 | Loss | **never sells below entry**; a losing coin is held until positive |
 | Daily loss | account down 3% today: no new buys (nothing sold) |
 | Stuck buy | a rotator buy unfilled for 30 min is cancelled |

@@ -12,8 +12,9 @@ Sell (any one is enough):
   2. Take-profit:  position is up TAKE_PROFIT or more
   3. Signal exit:  fast EMA drops below slow EMA, or close falls below the trend SMA
 
-With sell_at_loss=False (crypto), 1 is skipped and 3 only fires while the
-position is in profit, so a losing position is held until it turns positive.
+With sell_at_loss=False (crypto), 1 is skipped and 3 only fires above min_profit
+(crypto: +0.75%, covering Alpaca's ~0.25% fee each way and the spread), so a
+position is never sold below what it cost.
 """
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -35,6 +36,7 @@ class Rules:
     take_profit: float = 0.10      # ✅ 0.10 = sell at +10%
     candle_minutes: int = 60       # ✅ 60 = hourly candles
     sell_at_loss: bool = True      # ✅ False = never sell below entry; hold until in profit
+    min_profit: float = 0.0        # ✅ with sell_at_loss=False: signal exits only above this gain
 
 
 # ---------- indicators (plain Python, no pandas needed) ----------
@@ -185,8 +187,8 @@ def exit_reason(position, signal: Signal, r: Rules):
         return f"stop-loss ({pl:+.1%})"
     if pl >= r.take_profit:
         return f"take-profit ({pl:+.1%})"
-    if pl <= 0 and not r.sell_at_loss:
-        return None                                          # ✅ in loss: hold, wait for profit
+    if pl <= r.min_profit and not r.sell_at_loss:
+        return None                                          # ✅ not clearly in profit: hold
     if signal is not None and signal.sell:
         return f"signal exit ({pl:+.1%}; {signal.reason})"
     return None

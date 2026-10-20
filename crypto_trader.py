@@ -35,7 +35,7 @@ DAILY_LOSS_LIMIT = 0.03              # ✅ no new buys if account is down 3% tod
 LOOKBACK_DAYS = 5                    # ✅ 5 days of 30-minute candles = ~240 candles
 CANDLE = TimeFrame(30, TimeFrameUnit.Minute)                          # ✅ 30-minute candles
 RULES = Rules(take_profit=0.15, candle_minutes=30,
-              sell_at_loss=False)                                      # ✅ crypto: only sell in profit
+              sell_at_loss=False, min_profit=0.0075)    # ✅ +0.75% covers fees + spread                                      # ✅ crypto: only sell in profit
 
 WATCHLIST = [
     "BTC/USD", "ETH/USD", "SOL/USD",   # ✅ core holdings

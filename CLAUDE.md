@@ -35,8 +35,8 @@ close > SMA 50, EMA 9 crossed above EMA 21 in the last 3 candles, RSI 14 < 70,
 ADX 14 >= 25, close > today's VWAP (resets midnight UTC for crypto, midnight New York for stocks).
 
 Sell:
-- **Crypto never sells at a loss** (`sell_at_loss=False`): no stop-loss; a losing
-  position is held until it is in profit. Then it sells at +15% take-profit, or on the
+- **Crypto never sells at a loss** (`sell_at_loss=False`, `min_profit=0.0075`): no stop-loss;
+  signal exits only above +0.75% so fees (~0.25% each way) and spread can't turn it into a loss. Then it sells at +15% take-profit, or on the
   signal exit (EMA 9 below EMA 21, or close below SMA 50).
   The +15% is a standing GTC limit sell at Alpaca (client_order_id prefix `tp-`), kept in sync
   each run by `sync_take_profits()`; `sell()` cancels it before closing a position.

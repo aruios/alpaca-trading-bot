@@ -6,7 +6,7 @@ and hold only the #1 performer, in one position of up to BUDGET_USD.
 Rules
   Buy:     leader is up at least MIN_GAIN_PCT today, not a coin crypto_trader.py holds.
   Profit:  standing GTC limit sell at entry +TAKE_PROFIT_PCT (Alpaca fills it 24/7).
-  Rotate:  a new leader beats the held coin by SWITCH_MARGIN, and the held coin is in profit.
+  Rotate:  a new leader beats the held coin by SWITCH_MARGIN, and the held coin is up > MIN_ROTATE_PROFIT_PCT.
   Loss:    never sells below entry (owner's crypto rule); a loser is held until positive.
   Daily:   account down MAX_DAILY_LOSS today -> no new buys (nothing is sold).
 
@@ -34,6 +34,7 @@ STABLECOINS      = {"USDC", "USDT", "USDG", "PAXG", "DAI", "PYUSD", "TUSD"}  # �
 MIN_GAIN_PCT     = 2.0       # ✅ only buy if leader is up at least this much today
 SWITCH_MARGIN    = 1.5       # ✅ new leader must beat current by this % (avoids churn)
 TAKE_PROFIT_PCT  = 8.0
+MIN_ROTATE_PROFIT_PCT = 0.75 # ✅ rotate only above this: covers ~0.25% fee each way + spread
 MAX_DAILY_LOSS   = 0.03      # ✅ no new buys if equity is down 3% today
 STALE_BUY_MINUTES = 30       # ✅ cancel a rotator buy still unfilled after this long
 RTP_PREFIX       = "rtp-"    # ✅ client_order_id prefix of the rotator's take-profit sells
@@ -157,13 +158,13 @@ def tick():
         held = next((r for r in ranked if r[0] == held_sym), None)
         held_pct = held[1] if held else -999
         if leader != held_sym and leader_pct - held_pct >= SWITCH_MARGIN:
-            if pl > 0:
+            if pl > MIN_ROTATE_PROFIT_PCT:
                 sell_all(held_sym, pos, f"rotate to {leader}", tps)
                 time.sleep(3)                             # ✅ let sell settle before buying
                 tps.pop(held_sym, None)
                 held_sym = None
             else:
-                print(f"HOLD {held_sym} ({pl:+.2f}%): {leader} leads but no selling at a loss")
+                print(f"HOLD {held_sym} ({pl:+.2f}%): {leader} leads, but rotating needs > +{MIN_ROTATE_PROFIT_PCT}% (no selling at a loss)")
         else:
             print(f"HOLD {held_sym} ({pl:+.2f}%), today {held_pct:+.2f}%")
 

@@ -202,8 +202,9 @@ def position_status(p, sig):
     why = exit_reason(p, sig, rules_for(p.symbol))
     if why:
         return f"SELL next run: {why}"
-    if p.crypto and p.unrealized_plpc <= 0:
-        return "🔒 holding until in profit"
+    rules = rules_for(p.symbol)
+    if p.crypto and not rules.sell_at_loss and p.unrealized_plpc <= rules.min_profit:
+        return f"🔒 holding until above +{rules.min_profit:.2%}"
     return "hold"
 
 
@@ -260,7 +261,7 @@ def positions_table(positions, signals, rotator_sym):
             "P/L $": p.unrealized_pl, "P/L %": p.unrealized_plpc * 100,
             "To take-profit": f"{((rot.TAKE_PROFIT_PCT / 100 if p.symbol == rotator_sym else tp) - p.unrealized_plpc) * 100:+.1f}%",
             "Bot will": "not managed" if p.symbol in stk.DONT_MANAGE
-            else f"rotator: sells at +{rot.TAKE_PROFIT_PCT:g}% or rotates while in profit" if p.symbol == rotator_sym
+            else f"rotator: sells at +{rot.TAKE_PROFIT_PCT:g}% or rotates above +{rot.MIN_ROTATE_PROFIT_PCT:g}%" if p.symbol == rotator_sym
             else position_status(p, signals.get(p.symbol)),
         })
     st.dataframe(rows, hide_index=True, width="stretch", column_config={
