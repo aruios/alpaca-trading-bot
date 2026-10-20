@@ -17,7 +17,11 @@ Rule-based bot that trades crypto and US stocks on an Alpaca **paper** account
 
 ## Files
 - `strategy.py` - shared indicators (EMA, SMA, RSI, ADX, VWAP), `Rules`, buy/sell logic.
-- `crypto_trader.py` - crypto, 30-minute candles, main + small-coin watchlists and budgets.
+- `crypto_trader.py` - crypto, 30-minute candles. `BUY_ENABLED = False`: only manages coins it
+  already holds (sells, `tp-` take-profit orders). Also holds shared crypto helpers.
+- `top_crypto_rotator.py` - owner's top-performer rotator; does all new crypto buys. One position
+  (<= $2,000 extra budget), +8% `rtp-` take-profit, rotates only while in profit, never sells at a
+  loss. Its coin = latest filled `rot-` buy still held (`rotator_holding()`); crypto_trader skips it.
 - `stock_trader.py` - stocks, hourly candles, checks `WATCHLIST` plus today's top gainers.
 - `chart.py` - saves `charts/<SYMBOL>.png`: candles, EMA 9 blue, EMA 21 black,
   VWAP purple, ADX red (own panel). Uses the same indicator code as the bot.

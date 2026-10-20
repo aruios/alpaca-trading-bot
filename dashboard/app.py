@@ -41,6 +41,7 @@ if not os.getenv("ALPACA_API_KEY"):
 
 import crypto_trader as ct                                    # noqa: E402  (needs keys set first)
 import stock_trader as stk                                    # noqa: E402
+import top_crypto_rotator as rot                              # noqa: E402
 from strategy import ema, vwap, adx, exit_reason, closed_candles  # noqa: E402
 from alpaca.trading.requests import GetOrdersRequest          # noqa: E402
 from alpaca.trading.enums import QueryOrderStatus, AssetClass  # noqa: E402
@@ -100,6 +101,11 @@ def load_signals(crypto_syms, stock_syms):
     sigs = dict(ct.get_signals(list(crypto_syms)))
     sigs.update(stk.get_signals(list(stock_syms)))
     return sigs
+
+
+@st.cache_data(ttl=60)
+def load_rotator_holding():
+    return ct.rotator_holding()
 
 
 @st.cache_data(ttl=60)
@@ -240,7 +246,7 @@ def overview(account, positions, small_set, tz):
                f"({tz.key}). Page refreshes every minute.")
 
 
-def positions_table(positions, signals):
+def positions_table(positions, signals, rotator_sym):
     if not positions:
         st.info("No open positions.")
         return
@@ -248,11 +254,13 @@ def positions_table(positions, signals):
     for p in sorted(positions, key=lambda p: p.unrealized_plpc, reverse=True):
         tp = rules_for(p.symbol).take_profit
         rows.append({
-            "Symbol": p.symbol, "Type": "crypto" if p.crypto else "stock",
+            "Symbol": p.symbol,
+            "Type": "crypto (rotator)" if p.symbol == rotator_sym else "crypto" if p.crypto else "stock",
             "Qty": p.qty, "Entry": p.entry, "Price": p.price, "Value": p.market_value,
             "P/L $": p.unrealized_pl, "P/L %": p.unrealized_plpc * 100,
-            "To take-profit": f"{(tp - p.unrealized_plpc) * 100:+.1f}%",
+            "To take-profit": f"{((rot.TAKE_PROFIT_PCT / 100 if p.symbol == rotator_sym else tp) - p.unrealized_plpc) * 100:+.1f}%",
             "Bot will": "not managed" if p.symbol in stk.DONT_MANAGE
+            else f"rotator: sells at +{rot.TAKE_PROFIT_PCT:g}% or rotates while in profit" if p.symbol == rotator_sym
             else position_status(p, signals.get(p.symbol)),
         })
     st.dataframe(rows, hide_index=True, width="stretch", column_config={
@@ -425,11 +433,13 @@ def page():
     with tabs[0]:
         overview(account, positions, small_set, tz)
         st.subheader("Positions")
-        positions_table(positions, signals)
+        positions_table(positions, signals, load_rotator_holding())
     with tabs[1]:
         st.caption("Each buy check on the last closed candle. A buy needs all 5. "
                    "This is what the bot would do if it ran now.")
         st.subheader("Crypto")
+        st.caption("New crypto buys are made by top_crypto_rotator.py (today's top performer); "
+                   "these checks now drive sells of the coins crypto_trader.py already holds.")
         signals_table(main + small, signals, held, small_set)
         st.subheader("Stocks")
         st.caption("Your WATCHLIST plus today's top gainers; the bot only trades in market hours.")

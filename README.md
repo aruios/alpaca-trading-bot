@@ -9,6 +9,10 @@ A Streamlit dashboard lets you watch everything live.
 
 ## How it trades
 
+**Crypto buying is done by the top-performer rotator** (see below). `crypto_trader.py` no longer
+buys (`BUY_ENABLED = False`); it keeps managing the coins it already holds with the sell rules here.
+Stocks use the rules below for both buying and selling.
+
 Every run, for each coin/stock, the bot downloads recent candles (only **closed** candles,
 so a half-formed candle never triggers a trade) and checks these rules (`strategy.py`).
 
@@ -50,6 +54,26 @@ Coins Alpaca doesn't list are skipped automatically and named in the log
 
 ---
 
+## Crypto rotator: `top_crypto_rotator.py`
+
+Every 15 minutes it ranks all liquid USD crypto pairs on Alpaca by today's % change
+(since midnight UTC) and holds only the #1 performer, in one position.
+
+| Setting | Value |
+|---|---|
+| Budget | **$2,000** in one position (on top of the $10,000 above), never more than 20% of cash |
+| Buy | leader is up **≥ 2%** today, has ≥ $1M traded today, and isn't a coin `crypto_trader.py` holds |
+| Take-profit | **+8%**, a standing limit sell at Alpaca (24/7) |
+| Rotate | a new leader beats the held coin by **≥ 1.5%** today, **and** the held coin is in profit |
+| Loss | **never sells below entry**; a losing coin is held until positive |
+| Daily loss | account down 3% today: no new buys (nothing sold) |
+| Stuck buy | a rotator buy unfilled for 30 min is cancelled |
+
+Its orders are tagged `rot-` (buys) and `rtp-` (take-profit), so the two crypto bots never
+touch each other's coins.
+
+---
+
 ## Where it runs
 
 ```
@@ -58,7 +82,7 @@ Mac off ──► GitHub Actions schedule   ──► sees a stale heartbeat (>4
 ```
 
 ### 1. On your Mac: `runner.py` (primary)
-- Crypto at **:02 and :32**, stocks at **:05** (stocks exit by themselves when the market is closed).
+- Crypto bot at **:02 and :32**, rotator at **:02, :17, :32, :47**, stocks at **:05** (stocks exit by themselves when the market is closed).
 - Pulls the latest `main` from GitHub before every run.
 - After each **successful** run it sets the `MAC_HEARTBEAT` repo variable, so GitHub stands down.
 - Installed as a launch agent: starts at login, restarts if it stops, keeps the Mac awake (`caffeinate`).
@@ -75,7 +99,7 @@ tail -f ~/.alpaca-trading-bot/logs/$(date +%F).log  # watch it
 Re-run `./mac/install.sh` after changing `.env`. Requires the GitHub CLI (`gh`) logged in.
 
 ### 2. On GitHub Actions: `.github/workflows/trading_bot.yml` (backup)
-- Scheduled crypto every 30 min and stocks hourly in market hours; each scheduled run skips
+- Scheduled crypto (bot + rotator) every 30 min and stocks hourly in market hours; each scheduled run skips
   itself while the Mac heartbeat is under 45 minutes old.
 - **Actions → Trading Bots → Run workflow** runs both jobs right away (always, even if the Mac is active).
 - Needs repo secrets `ALPACA_API_KEY` and `ALPACA_SECRET_KEY`.
@@ -124,7 +148,8 @@ Saves `charts/<SYMBOL>.png` with EMA 9 (blue), EMA 21 (black), VWAP (purple), AD
 | File | Purpose |
 |---|---|
 | `strategy.py` | indicators (EMA, SMA, RSI, ADX, VWAP), `Rules`, buy/sell logic shared by everything |
-| `crypto_trader.py` | crypto bot: watchlists, budgets, `RULES` |
+| `crypto_trader.py` | crypto bot: manages the coins it holds (buying is off), take-profit orders, shared crypto helpers |
+| `top_crypto_rotator.py` | crypto rotator: holds today's top performer, does all new crypto buys |
 | `stock_trader.py` | stock bot: budget, top-gainer scan, `RULES` |
 | `runner.py`, `mac/` | Mac runner and its install/uninstall scripts |
 | `.github/workflows/trading_bot.yml` | GitHub Actions schedule |

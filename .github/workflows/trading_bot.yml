@@ -39,6 +39,8 @@ jobs:
         if: steps.mac.outputs.skip != 'true'
       - run: python crypto_trader.py
         if: steps.mac.outputs.skip != 'true'
+      - run: python top_crypto_rotator.py
+        if: steps.mac.outputs.skip != 'true'
 
   stocks:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '5 14-20 * * 1-5'

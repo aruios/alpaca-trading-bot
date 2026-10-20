@@ -25,6 +25,7 @@ trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
 data_client = CryptoHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # 3. Config
+BUY_ENABLED = False                  # ✅ top_crypto_rotator.py does new crypto buys; this bot manages what it holds
 BUDGET_USD = 6000                    # ✅ max total crypto exposure (paper account is $10,000)
 MAIN_TRADE_USD = 750                 # ✅ $ per buy for main coins
 SMALL_TRADE_USD = 250                # ✅ $ per buy for coins under $1
@@ -73,10 +74,23 @@ def to_pair(symbol):
     return symbol if "/" in symbol else f"{symbol[:-3]}/{symbol[-3:]}"
 
 
-def crypto_positions():
+ROT_PREFIX = "rot-"                  # ✅ client_order_id prefix of top_crypto_rotator.py buys
+
+
+def rotator_holding():
+    """Pair top_crypto_rotator.py owns: its latest filled buy, while that position is open."""
+    for o in trading_client.get_orders(GetOrdersRequest(
+            status=QueryOrderStatus.CLOSED, side=OrderSide.BUY, limit=200)):  # ✅ newest first
+        if (o.client_order_id or "").startswith(ROT_PREFIX) and float(o.filled_qty or 0) > 0:
+            sym = to_pair(o.symbol)
+            return sym if sym in crypto_positions() else None
+    return None
+
+
+def crypto_positions(exclude=None):
     return {
         to_pair(p.symbol): p for p in trading_client.get_all_positions()
-        if p.asset_class == AssetClass.CRYPTO
+        if p.asset_class == AssetClass.CRYPTO and to_pair(p.symbol) != exclude
     }
 
 
@@ -149,9 +163,9 @@ def place_take_profit(sym, position):
         print(f"Take-profit order failed for {sym}: {e}")
 
 
-def sync_take_profits():
-    """Every crypto position gets exactly one +TAKE_PROFIT limit sell for its full qty."""
-    positions = crypto_positions()
+def sync_take_profits(exclude=None):
+    """Every crypto position (except the rotator's) gets one +TAKE_PROFIT limit sell for its full qty."""
+    positions = crypto_positions(exclude)
     _, tps = open_orders()
     for sym, p in positions.items():
         target = float(p.avg_entry_price) * (1 + RULES.take_profit)
@@ -201,7 +215,8 @@ def sell(position, why, tp_orders=()):
 if __name__ == "__main__":
     main = get_tradable(WATCHLIST)
     small = [c for c in get_tradable(SMALL_COIN_WATCHLIST) if c not in main]
-    positions = crypto_positions()
+    rotator_sym = rotator_holding()                                   # ✅ never touch the rotator's coin
+    positions = crypto_positions(rotator_sym)
     pending_buys, tp_orders = open_orders()
 
     # ✅ Get candles for everything we might buy AND everything we hold
@@ -218,10 +233,15 @@ if __name__ == "__main__":
     for sym in sold:
         positions.pop(sym)
 
+    if not BUY_ENABLED:
+        print("New crypto buys are done by top_crypto_rotator.py; managing existing positions only.")
+        sync_take_profits(rotator_sym)
+        sys.exit(0)
+
     # ---- 2. BUY: only on a fresh signal, within budget ----
     if daily_loss_hit(trading_client.get_account(), DAILY_LOSS_LIMIT):
         print(f"Account down {DAILY_LOSS_LIMIT:.0%}+ today, no new buys.")
-        sync_take_profits()
+        sync_take_profits(rotator_sym)
         sys.exit(0)                                                   # ✅ normal stop, sells above already ran
 
     small_set = set(small)
@@ -262,4 +282,4 @@ if __name__ == "__main__":
 
     # ---- 3. TAKE-PROFIT: a standing +15% sell on every position ----
     time.sleep(3)                                                     # ✅ let new market buys fill
-    sync_take_profits()
+    sync_take_profits(rotator_sym)
