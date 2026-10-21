@@ -109,6 +109,21 @@ Re-run `./mac/install.sh` after changing `.env`. Requires the GitHub CLI (`gh`) 
 
 ---
 
+## Backtest: `backtest.py`
+
+Replays the current rules on Alpaca price history, with fees (0.25% per side on crypto).
+Places no orders. Prices are cached in `backtest_data/`.
+
+```bash
+.venv/bin/python backtest.py              # last 6 months
+.venv/bin/python backtest.py --months 12
+```
+Reports, per strategy: trades, win rate, average win/loss, realized P/L, positions still open
+(with their unrealized loss), total return on budget, worst drawdown, and buy-and-hold BTC/SPY.
+Not modelled: the stock top-gainer scan, the 3% daily stop, the rotator's 15-min cadence.
+
+---
+
 ## Chart image: `chart.py`
 
 ```bash
@@ -130,6 +145,7 @@ Saves `charts/<SYMBOL>.png` with EMA 9 (blue), EMA 21 (black), VWAP (purple), AD
 | `stock_trader.py` | stock bot: budget, top-gainer scan, `RULES` |
 | `runner.py`, `mac/` | Mac runner and its install/uninstall scripts |
 | `.github/workflows/trading_bot.yml` | GitHub Actions schedule |
+| `backtest.py` | replays the rules on past prices, with fees |
 | `chart.py` | saves a PNG chart |
 | `CLAUDE.md` | project notes for Claude sessions (e.g. on claude.ai/code) |
 | `.mcp.json` | Alpaca MCP server for Claude (paper; needs `uv` installed) |

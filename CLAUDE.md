@@ -26,6 +26,8 @@ Rule-based bot that trades crypto and US stocks on an Alpaca **paper** account
 - `stock_trader.py` - stocks, hourly candles, checks `WATCHLIST` plus today's top gainers.
 - `chart.py` - saves `charts/<SYMBOL>.png`: candles, EMA 9 blue, EMA 21 black,
   VWAP purple, ADX red (own panel). Uses the same indicator code as the bot.
+- `backtest.py` - replays current rules on Alpaca history with fees (no orders); run it to
+  judge any rule change before shipping. Signals are verified identical to `strategy.evaluate`.
 - `bot.py` - old one-off SPY example, not run by the workflow.
 
 ## Trading rules (owner's choices - keep them unless asked to change)
