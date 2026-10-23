@@ -194,9 +194,12 @@ LIVE = object()
 
 
 def run_crypto_bot(series, main, small, stop_loss=LIVE, max_days=None, take_profit=None,
-                   budget=None, name="Crypto bot"):
+                   budget=None, name="Crypto bot", live_stop=False, trail=None, trail_after=0.0):
     """stop_loss: sell at -x (default: the live RULES.stop_loss; None = never). max_days: sell a
-    position still below entry after N days. take_profit / budget: override the live settings."""
+    position still below entry after N days. take_profit / budget: override the live settings.
+    live_stop: the stop is watched continuously (fills at the stop price when a candle's low
+    reaches it) instead of only at each 30-min run. trail: sell when price falls this far from
+    its highest point since entry, once the position has been up trail_after."""
     r = ct.RULES
     stop_loss = r.stop_loss if stop_loss is LIVE else stop_loss
     tp = take_profit or r.take_profit
@@ -205,6 +208,20 @@ def run_crypto_bot(series, main, small, stop_loss=LIVE, max_days=None, take_prof
     small = set(small)
     for t in timeline(series):
         prices = prices_at(series, t)
+        for sym in list(book.pos):                                    # ✅ variants watched live, inside the candle
+            i = series[sym].index.get(t)
+            if i is None:
+                continue
+            p, bar = book.pos[sym], series[sym].c[i]
+            stop_px = p.entry * (1 - stop_loss) if (live_stop and stop_loss is not None) else None
+            trail_px = None
+            if trail is not None:
+                p.peak = max(getattr(p, "peak", p.entry), bar.high)
+                if p.peak >= p.entry * (1 + trail_after):
+                    trail_px = p.peak * (1 - trail)
+            exit_px = max([x for x in (stop_px, trail_px) if x is not None], default=None)
+            if exit_px is not None and bar.low <= exit_px:
+                book.sell(sym, min(exit_px, bar.open), "trailing stop" if exit_px == trail_px else "stop-loss")
         for sym in list(book.pos):                                    # ✅ standing +15% limit sell
             i = series[sym].index.get(t)
             target = book.pos[sym].entry * (1 + tp)
