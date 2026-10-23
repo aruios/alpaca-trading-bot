@@ -1,5 +1,8 @@
 """
-Top-performer crypto rotator for Alpaca (paper). Does all new crypto buying.
+DISABLED (ENABLED = False): backtests lost money in every version (12 months: -33% with no
+stop, worse with stops), so crypto_trader.py does all crypto buying again. Kept for backtest.py.
+
+Top-performer crypto rotator for Alpaca (paper).
 Each run: rank liquid USD crypto pairs (stablecoins excluded) by today's % change (since UTC midnight)
 and hold only the #1 performer, in one position of up to BUDGET_USD.
 
@@ -29,6 +32,7 @@ from crypto_trader import (trading_client as trading, data_client as data, ROT_P
 from strategy import daily_loss_hit, closed_candles, ema, rsi, vwap
 
 # ---------- config ----------
+ENABLED          = False     # ✅ off: lost money in backtests. Also set crypto_trader.ROTATOR_ENABLED
 BUDGET_USD       = 2000      # ✅ one position of up to this much (extra on top of the $10k cap)
 ALLOC_PCT        = 0.20      # ✅ and never more than this % of cash
 MIN_DOLLAR_VOL   = 10_000    # ✅ skip illiquid coins (yesterday's $ volume on Alpaca, which is small)
@@ -222,6 +226,9 @@ def tick():
 
 
 if __name__ == "__main__":
+    if not ENABLED:
+        print("Rotator is disabled (ENABLED = False); no orders placed.")
+        sys.exit(0)
     print("Rotator (PAPER)")
     tick()
     sys.exit(0)

@@ -5,8 +5,8 @@
 
 Simulates three strategies separately, each with its own budget, using the settings in
 crypto_trader.py, top_crypto_rotator.py, stock_trader.py and strategy.py:
-  1. Crypto bot   30-min candles, 5 buy checks, +15% limit take-profit, signal exit > +0.75%, no stop
-  2. Rotator      30-min candles, today's top riser (>= +2%) with a confirming chart, +8% limit
+  1. Crypto bot   30-min candles, 5 buy checks, +15% limit take-profit, -15% stop, signal exit > +0.75%
+  2. Rotator      (disabled live) today's top riser (>= +2%) with a confirming chart, +8% limit
                   take-profit, rotates > +0.75% only, no stop
   3. Stocks       1-hour candles on WATCHLIST, 5 buy checks, +10% / -7%, signal exit
 
@@ -153,9 +153,9 @@ class Book:
         self.realized = 0.0
         self.curve = []
 
-    def buy(self, sym, usd, price):
+    def buy(self, sym, usd, price, t=None):
         fill = price * (1 + self.slip)
-        self.pos[sym] = SimpleNamespace(qty=usd / fill * (1 - self.fee), entry=fill, cost=usd)
+        self.pos[sym] = SimpleNamespace(qty=usd / fill * (1 - self.fee), entry=fill, cost=usd, t=t)
 
     def sell(self, sym, price, reason, market=True):
         p = self.pos.pop(sym)
@@ -190,24 +190,41 @@ def prices_at(series, t):
 
 # ---------- 1. crypto bot ----------
 
-def run_crypto_bot(series, main, small):
+LIVE = object()
+
+
+def run_crypto_bot(series, main, small, stop_loss=LIVE, max_days=None, take_profit=None,
+                   budget=None, name="Crypto bot"):
+    """stop_loss: sell at -x (default: the live RULES.stop_loss; None = never). max_days: sell a
+    position still below entry after N days. take_profit / budget: override the live settings."""
     r = ct.RULES
-    book = Book("Crypto bot", ct.BUDGET_USD, CRYPTO_FEE, CRYPTO_SLIP)
+    stop_loss = r.stop_loss if stop_loss is LIVE else stop_loss
+    tp = take_profit or r.take_profit
+    budget = budget or ct.BUDGET_USD
+    book = Book(name, budget, CRYPTO_FEE, CRYPTO_SLIP)
     small = set(small)
     for t in timeline(series):
         prices = prices_at(series, t)
         for sym in list(book.pos):                                    # ✅ standing +15% limit sell
             i = series[sym].index.get(t)
-            target = book.pos[sym].entry * (1 + r.take_profit)
+            target = book.pos[sym].entry * (1 + tp)
             if i is not None and series[sym].c[i].high >= target:
                 book.sell(sym, target, "take-profit", market=False)
         sold = set()
+        for sym in list(book.pos):                                    # ✅ variants: stop-loss / time limit
+            if sym not in prices:
+                continue
+            pl = book.pl(sym, prices[sym])
+            if stop_loss is not None and pl <= -stop_loss:
+                book.sell(sym, prices[sym], "stop-loss"); sold.add(sym)
+            elif max_days is not None and pl < 0 and t - book.pos[sym].t >= timedelta(days=max_days):
+                book.sell(sym, prices[sym], "time limit"); sold.add(sym)
         for sym in list(book.pos):                                    # ✅ signal exit only above min_profit
             i = series[sym].index.get(t)
             if i is None:
                 continue
             _, sell, _ = series[sym].signal(i)
-            if sell and book.pl(sym, prices[sym]) > r.min_profit:
+            if sell and (r.min_profit is None or book.pl(sym, prices[sym]) > r.min_profit):
                 book.sell(sym, prices[sym], "signal exit")
                 sold.add(sym)
         exposure = book.exposure(prices)
@@ -222,9 +239,9 @@ def run_crypto_bot(series, main, small):
                 candidates.append((strength, sym))
         for _, sym in sorted(candidates, reverse=True):
             usd = ct.SMALL_TRADE_USD if sym in small else ct.MAIN_TRADE_USD
-            if exposure + usd > ct.BUDGET_USD or (sym in small and small_exp + usd > ct.SMALL_COIN_BUDGET_USD):
+            if exposure + usd > budget or (sym in small and small_exp + usd > ct.SMALL_COIN_BUDGET_USD):
                 continue
-            book.buy(sym, usd, prices[sym])
+            book.buy(sym, usd, prices[sym], t)
             exposure += usd
             small_exp += usd if sym in small else 0
         book.mark(prices)
@@ -248,8 +265,9 @@ def day_stats(s):
     return day_open, prev_vol
 
 
-def run_rotator(series):
-    book = Book("Rotator", rot.BUDGET_USD, CRYPTO_FEE, CRYPTO_SLIP)
+def run_rotator(series, stop_loss=None, name="Rotator"):
+    """stop_loss: sell the held coin at -x and free the budget (live: None)."""
+    book = Book(name, rot.BUDGET_USD, CRYPTO_FEE, CRYPTO_SLIP)
     stats = {sym: day_stats(s) for sym, s in series.items()}
     held = None
     for t in timeline(series):
@@ -260,6 +278,9 @@ def run_rotator(series):
             if i is not None and series[held].c[i].high >= target:
                 book.sell(held, target, "take-profit", market=False)
                 held = None
+        if held and stop_loss is not None and held in prices and book.pl(held, prices[held]) <= -stop_loss:
+            book.sell(held, prices[held], "stop-loss")
+            held = None
         ranked = []
         for sym, s in series.items():
             i = s.index.get(t)
@@ -287,7 +308,7 @@ def run_rotator(series):
                 book.sell(held, prices[held], f"rotate to {pick[0]}")
                 held = None
         if held is None and pick:
-            book.buy(pick[0], rot.BUDGET_USD, prices[pick[0]])
+            book.buy(pick[0], rot.BUDGET_USD, prices[pick[0]], t)
             held = pick[0]
         book.mark(prices)
     return book, prices
@@ -295,9 +316,10 @@ def run_rotator(series):
 
 # ---------- 3. stocks ----------
 
-def run_stocks(series):
+def run_stocks(series, trend_exit_only=False, name="Stocks (watchlist)"):
+    """trend_exit_only: signal exit only when price falls below SMA 50 (live: also on EMA 9 < 21)."""
     r = stk.RULES
-    book = Book("Stocks (watchlist)", stk.BUDGET_USD, 0.0, STOCK_SLIP)
+    book = Book(name, stk.BUDGET_USD, 0.0, STOCK_SLIP)
     for t in timeline(series):
         prices = prices_at(series, t)
         close_et = (t + timedelta(hours=1)).astimezone(NY)
@@ -310,6 +332,8 @@ def run_stocks(series):
                 continue
             pl = book.pl(sym, prices[sym])
             _, sell, _ = series[sym].signal(i)
+            if trend_exit_only:
+                sell = prices[sym] < series[sym].trend[i]
             why = ("stop-loss" if pl <= -r.stop_loss else "take-profit" if pl >= r.take_profit
                    else "signal exit" if sell else None)
             if why:
@@ -326,7 +350,7 @@ def run_stocks(series):
         for _, sym in sorted(candidates, reverse=True):
             if exposure + stk.TRADE_USD > stk.BUDGET_USD:
                 break
-            book.buy(sym, stk.TRADE_USD, prices[sym])
+            book.buy(sym, stk.TRADE_USD, prices[sym], t)
             exposure += stk.TRADE_USD
         book.mark(prices)
     return book, prices
@@ -373,21 +397,16 @@ def hold_return(candles):
     return candles[-1].close / candles[0].close - 1 if candles else 0.0
 
 
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--months", type=int, default=6)
-    months = ap.parse_args().months
-    end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+def load(months):
+    """Download (or read cached) candles and build indicator series for a period."""
+    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)  # ✅ stable cache key per day
     start = end - timedelta(days=30 * months)
     warmup = start - timedelta(days=5)                                # ✅ indicators need history first
-    print(f"Backtest {start:%Y-%m-%d} to {end:%Y-%m-%d} ({months} months). No orders are placed.")
-
     main = ct.get_tradable(ct.WATCHLIST)
     small = [c for c in ct.get_tradable(ct.SMALL_COIN_WATCHLIST) if c not in main]
     rot_universe = rot.usd_pairs()
     coins = sorted(set(main) | set(small) | set(rot_universe) | {"BTC/USD"})
     raw = crypto_bars(coins, warmup, end)
-    crypto = {s: Series(c, ct.RULES) for s, c in raw.items() if len(c) > 60}
 
     def from_start(series):
         """Indicators use the warm-up candles; trading starts at `start`."""
@@ -399,20 +418,29 @@ if __name__ == "__main__":
                 out[sym] = s
         return out
 
-    crypto = from_start(crypto)
-    btc = [b for b in raw.get("BTC/USD", []) if b.timestamp >= start]
-
-    book, prices = run_crypto_bot({s: crypto[s] for s in main + small if s in crypto},
-                                  [s for s in main if s in crypto], [s for s in small if s in crypto])
-    report(book, prices, "BTC", hold_return(btc))
-    book, prices = run_rotator({s: crypto[s] for s in rot_universe if s in crypto})
-    report(book, prices, "BTC", hold_return(btc))
-
+    crypto = from_start({s: Series(c, ct.RULES) for s, c in raw.items() if len(c) > 60})
     watch = list(dict.fromkeys(stk.WATCHLIST + ["SPY"]))
     raw_st = stock_bars(watch, warmup - timedelta(days=10), end)
     stocks = from_start({s: Series(c, stk.RULES) for s, c in raw_st.items() if len(c) > 60 and s in stk.WATCHLIST})
-    spy = [b for b in raw_st.get("SPY", []) if b.timestamp >= start]
-    book, prices = run_stocks(stocks)
-    report(book, prices, "SPY", hold_return(spy))
+    return SimpleNamespace(
+        start=start, end=end, crypto=crypto, stocks=stocks,
+        main=[s for s in main if s in crypto], small=[s for s in small if s in crypto],
+        rot_universe=[s for s in rot_universe if s in crypto],
+        btc=hold_return([b for b in raw.get("BTC/USD", []) if b.timestamp >= start]),
+        spy=hold_return([b for b in raw_st.get("SPY", []) if b.timestamp >= start]))
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--months", type=int, default=6)
+    months = ap.parse_args().months
+    d = load(months)
+    print(f"Backtest {d.start:%Y-%m-%d} to {d.end:%Y-%m-%d} ({months} months). No orders are placed.")
+    book, prices = run_crypto_bot({s: d.crypto[s] for s in d.main + d.small}, d.main, d.small)
+    report(book, prices, "BTC", d.btc)
+    book, prices = run_rotator({s: d.crypto[s] for s in d.rot_universe})
+    report(book, prices, "BTC", d.btc)
+    book, prices = run_stocks(d.stocks)
+    report(book, prices, "SPY", d.spy)
     print("\nApproximation: see the notes at the top of backtest.py for what is not modelled.")
     sys.exit(0)

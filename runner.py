@@ -1,7 +1,6 @@
 """Run the bot on this Mac right after each candle closes, for as long as the Mac is on.
 
-  crypto_trader.py  at :02 and :32 (30-minute candles; manages its positions)
-  top_crypto_rotator.py  at :02, :17, :32, :47 (all new crypto buys)
+  crypto_trader.py  at :02 and :32 (30-minute candles)
   stock_trader.py   at :05 every hour (it exits by itself when the market is closed)
 
 Before each run it pulls the latest code from GitHub, so changes merged to main apply here too.
@@ -23,7 +22,6 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 REPO = "aruios/alpaca-trading-bot"
 LOG_DIR = os.path.join(ROOT, "logs")
 CRYPTO_MINUTES = (2, 32)       # ✅ same as trading_bot.yml
-ROTATOR_MINUTES = (2, 17, 32, 47)
 STOCK_MINUTE = 5
 RUN_TIMEOUT = 10 * 60          # ✅ a stuck run never blocks the next one for long
 
@@ -76,8 +74,6 @@ def due_jobs(t):
     jobs = []
     if t.minute in CRYPTO_MINUTES:
         jobs.append("crypto_trader.py")
-    if t.minute in ROTATOR_MINUTES:
-        jobs.append("top_crypto_rotator.py")
     if t.minute == STOCK_MINUTE and t.weekday() < 5:
         jobs.append("stock_trader.py")
     return jobs
@@ -99,7 +95,7 @@ def tick(jobs):
 
 if __name__ == "__main__":
     if "--once" in sys.argv:
-        tick(["crypto_trader.py", "top_crypto_rotator.py", "stock_trader.py"])
+        tick(["crypto_trader.py", "stock_trader.py"])
         sys.exit(0)
 
     log(f"runner started (pid {os.getpid()})")
@@ -110,7 +106,7 @@ if __name__ == "__main__":
             late = now - slot
             if late > timedelta(minutes=20):                  # ✅ woke from sleep: one catch-up crypto run
                 log(f"woke up {late} after the {slot:%H:%M} UTC slot, running crypto now")
-                tick(["crypto_trader.py", "top_crypto_rotator.py"])
+                tick(["crypto_trader.py"])
             else:
                 tick(due_jobs(slot))
             slot = next_slot(datetime.now(timezone.utc))

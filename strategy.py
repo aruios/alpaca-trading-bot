@@ -12,9 +12,8 @@ Sell (any one is enough):
   2. Take-profit:  position is up TAKE_PROFIT or more
   3. Signal exit:  fast EMA drops below slow EMA, or close falls below the trend SMA
 
-With sell_at_loss=False (crypto), 1 is skipped and 3 only fires above min_profit
-(crypto: +0.75%, covering Alpaca's ~0.25% fee each way and the spread), so a
-position is never sold below what it cost.
+stop_loss=None turns 1 off. min_profit makes 3 fire only above that gain (crypto: +0.75%,
+covering Alpaca's ~0.25% fee each way and the spread); None = signal exit at any P/L.
 """
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -32,11 +31,10 @@ class Rules:
     adx_min: float = 25.0          # ✅ ADX below this = choppy market, no buy
     vwap_tz: str = "UTC"           # ✅ VWAP restarts at midnight in this timezone
     cross_lookback: int = 3        # ✅ a cross in the last N candles still counts (survives a missed run)
-    stop_loss: float = 0.07        # ✅ 0.07 = sell at -7%
+    stop_loss: float = 0.07        # ✅ 0.07 = sell at -7%; None = no stop-loss
     take_profit: float = 0.10      # ✅ 0.10 = sell at +10%
     candle_minutes: int = 60       # ✅ 60 = hourly candles
-    sell_at_loss: bool = True      # ✅ False = never sell below entry; hold until in profit
-    min_profit: float = 0.0        # ✅ with sell_at_loss=False: signal exits only above this gain
+    min_profit: float = None       # ✅ signal exits only above this gain; None = at any P/L
 
 
 # ---------- indicators (plain Python, no pandas needed) ----------
@@ -175,11 +173,11 @@ def evaluate(candles, r: Rules) -> Signal:
 def exit_reason(position, signal: Signal, r: Rules):
     """Return why to sell this position, or None to keep holding."""
     pl = float(position.unrealized_plpc)                     # ✅ e.g. -0.07 = -7%
-    if pl <= -r.stop_loss and r.sell_at_loss:
+    if r.stop_loss is not None and pl <= -r.stop_loss:
         return f"stop-loss ({pl:+.1%})"
     if pl >= r.take_profit:
         return f"take-profit ({pl:+.1%})"
-    if pl <= r.min_profit and not r.sell_at_loss:
+    if r.min_profit is not None and pl <= r.min_profit:
         return None                                          # ✅ not clearly in profit: hold
     if signal is not None and signal.sell:
         return f"signal exit ({pl:+.1%}; {signal.reason})"

@@ -9,9 +9,9 @@ Watch positions, orders and P/L on the Alpaca paper dashboard; the bot's decisio
 
 ## How it trades
 
-**Crypto buying is done by the top-performer rotator** (see below). `crypto_trader.py` no longer
-buys (`BUY_ENABLED = False`); it keeps managing the coins it already holds with the sell rules here.
-Stocks use the rules below for both buying and selling.
+Crypto and stocks both use the rules below. The crypto rules were chosen by backtest
+(`backtest.py`): over the last 12 months they made **+47.5%** on the crypto budget while
+holding BTC lost 29% (past results, not a promise).
 
 Every run, for each coin/stock, the bot downloads recent candles (only **closed** candles,
 so a half-formed candle never triggers a trade) and checks these rules (`strategy.py`).
@@ -30,7 +30,7 @@ so a half-formed candle never triggers a trade) and checks these rules (`strateg
 |---|---|---|
 | Take-profit | +15%: a **standing limit sell at Alpaca**, filled the moment price touches it, 24/7, even with the Mac off | +10% (checked each run) |
 | Signal exit (EMA 9 < EMA 21, or close < SMA 50) | **only above +0.75%** (covers Alpaca's ~0.25% fee each way + spread) | yes |
-| Stop-loss | **none: never sells at a loss**, holds until positive | −7% |
+| Stop-loss | **−15%** (backtest winner; holding losers forever lost money) | −7% |
 
 ### Limits
 | | Crypto | Stocks |
@@ -54,23 +54,13 @@ Coins Alpaca doesn't list are skipped automatically and named in the log
 
 ---
 
-## Crypto rotator: `top_crypto_rotator.py`
+## Crypto rotator: `top_crypto_rotator.py` (disabled)
 
-Every 15 minutes it ranks all liquid USD crypto pairs on Alpaca by today's % change
-(since midnight UTC) and holds only the #1 performer, in one position.
-
-| Setting | Value |
-|---|---|
-| Budget | **$2,000** in one position (on top of the $10,000 above), never more than 20% of cash |
-| Buy | the best coin up **≥ 2%** today whose **30-minute chart confirms the move**: EMA 9 > EMA 21, price above today's VWAP, RSI 14 < 70. Must have traded ≥ $10k on Alpaca yesterday, not be a stablecoin, and not be a coin `crypto_trader.py` holds. If the top riser fails the chart check, the next riser is tried. |
-| Take-profit | **+8%**, a standing limit sell at Alpaca (24/7) |
-| Rotate | that pick beats the held coin by **≥ 1.5%** today, **and** the held coin is up **> +0.75%** |
-| Loss | **never sells below entry**; a losing coin is held until positive |
-| Daily loss | account down 3% today: no new buys (nothing sold) |
-| Stuck buy | a rotator buy unfilled for 30 min is cancelled |
-
-Its orders are tagged `rot-` (buys) and `rtp-` (take-profit), so the two crypto bots never
-touch each other's coins.
+Your top-performer rotator (buy today's #1 riser, +8% take-profit, rotate to a stronger leader)
+is **turned off** (`ENABLED = False` in it, `ROTATOR_ENABLED = False` in `crypto_trader.py`).
+It lost money in every backtest: 12 months −33% with no stop, and far worse with a stop-loss,
+because buying a coin after it has already jumped mostly buys the top. The file is kept so
+`backtest.py` can still test it.
 
 ---
 
@@ -82,7 +72,7 @@ Mac off ──► GitHub Actions schedule   ──► sees a stale heartbeat (>4
 ```
 
 ### 1. On your Mac: `runner.py` (primary)
-- Crypto bot at **:02 and :32**, rotator at **:02, :17, :32, :47**, stocks at **:05** (stocks exit by themselves when the market is closed).
+- Crypto at **:02 and :32**, stocks at **:05** (stocks exit by themselves when the market is closed).
 - Pulls the latest `main` from GitHub before every run.
 - After each **successful** run it sets the `MAC_HEARTBEAT` repo variable, so GitHub stands down.
 - Installed as a launch agent: starts at login, restarts if it stops, keeps the Mac awake (`caffeinate`).
@@ -99,7 +89,7 @@ tail -f ~/.alpaca-trading-bot/logs/$(date +%F).log  # watch it
 Re-run `./mac/install.sh` after changing `.env`. Requires the GitHub CLI (`gh`) logged in.
 
 ### 2. On GitHub Actions: `.github/workflows/trading_bot.yml` (backup)
-- Scheduled crypto (bot + rotator) every 30 min and stocks hourly in market hours; each scheduled run skips
+- Scheduled crypto every 30 min and stocks hourly in market hours; each scheduled run skips
   itself while the Mac heartbeat is under 45 minutes old.
 - **Actions → Trading Bots → Run workflow** runs both jobs right away (always, even if the Mac is active).
 - Needs repo secrets `ALPACA_API_KEY` and `ALPACA_SECRET_KEY`.
@@ -120,7 +110,7 @@ Places no orders. Prices are cached in `backtest_data/`.
 ```
 Reports, per strategy: trades, win rate, average win/loss, realized P/L, positions still open
 (with their unrealized loss), total return on budget, worst drawdown, and buy-and-hold BTC/SPY.
-Not modelled: the stock top-gainer scan, the 3% daily stop, the rotator's 15-min cadence.
+Not modelled: the stock top-gainer scan and the 3% daily stop.
 
 ---
 
@@ -141,7 +131,7 @@ Saves `charts/<SYMBOL>.png` with EMA 9 (blue), EMA 21 (black), VWAP (purple), AD
 |---|---|
 | `strategy.py` | indicators (EMA, SMA, RSI, ADX, VWAP), `Rules`, buy/sell logic shared by everything |
 | `crypto_trader.py` | crypto bot: manages the coins it holds (buying is off), take-profit orders, shared crypto helpers |
-| `top_crypto_rotator.py` | crypto rotator: holds today's top performer, does all new crypto buys |
+| `top_crypto_rotator.py` | crypto rotator, **disabled** (lost in backtests); kept for `backtest.py` |
 | `stock_trader.py` | stock bot: budget, top-gainer scan, `RULES` |
 | `runner.py`, `mac/` | Mac runner and its install/uninstall scripts |
 | `.github/workflows/trading_bot.yml` | GitHub Actions schedule |
@@ -159,6 +149,7 @@ Saves `charts/<SYMBOL>.png` with EMA 9 (blue), EMA 21 (black), VWAP (purple), AD
 
 ## Limitations
 - Follows fixed rules: no chart-pattern recognition, no news.
-- Crypto with no stop-loss can hold a falling coin indefinitely, tying up budget.
+- Crypto stop-losses at −15% realize real losses (avg loss in the backtest ≈ −16% vs avg win +5.7%);
+  the strategy relies on winning ~80% of trades.
 - Thinly traded coins with no volume since midnight UTC fail the VWAP check.
 - Paper trading only; fills and slippage differ from a live account.

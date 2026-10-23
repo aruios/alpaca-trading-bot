@@ -25,7 +25,7 @@ trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
 data_client = CryptoHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # 3. Config
-BUY_ENABLED = False                  # ✅ top_crypto_rotator.py does new crypto buys; this bot manages what it holds
+BUY_ENABLED = True                   # ✅ this bot does all crypto buying (the rotator is off: it lost in backtests)
 BUDGET_USD = 6000                    # ✅ max total crypto exposure (paper account is $10,000)
 MAIN_TRADE_USD = 750                 # ✅ $ per buy for main coins
 SMALL_TRADE_USD = 250                # ✅ $ per buy for coins under $1
@@ -34,8 +34,8 @@ SMALL_COIN_MAX_PRICE = 1.00          # ✅ "small coin" = last close at or below
 DAILY_LOSS_LIMIT = 0.03              # ✅ no new buys if account is down 3% today
 LOOKBACK_DAYS = 5                    # ✅ 5 days of 30-minute candles = ~240 candles
 CANDLE = TimeFrame(30, TimeFrameUnit.Minute)                          # ✅ 30-minute candles
-RULES = Rules(take_profit=0.15, candle_minutes=30,
-              sell_at_loss=False, min_profit=0.0075)    # ✅ crypto: only sell above +0.75% (covers fees + spread)
+RULES = Rules(stop_loss=0.15, take_profit=0.15, candle_minutes=30,
+              min_profit=0.0075)    # ✅ -15% stop (backtest winner); signal exits only above +0.75% (fees + spread)
 
 WATCHLIST = [
     "BTC/USD", "ETH/USD", "SOL/USD",   # ✅ core holdings
@@ -75,6 +75,7 @@ def to_pair(symbol):
 
 
 ROT_PREFIX = "rot-"                  # ✅ client_order_id prefix of top_crypto_rotator.py buys
+ROTATOR_ENABLED = False              # ✅ keep in sync with top_crypto_rotator.ENABLED
 
 
 def rotator_holding():
@@ -125,7 +126,8 @@ def open_orders():
         sym = to_pair(o.symbol)
         if o.side == OrderSide.BUY:
             buys.setdefault(sym, []).append(o)
-        elif (o.client_order_id or "").startswith(TP_PREFIX):
+        elif (o.client_order_id or "").startswith(TP_PREFIX) or (
+                not ROTATOR_ENABLED and (o.client_order_id or "").startswith("rtp-")):  # ✅ adopt rotator leftovers
             tps.setdefault(sym, []).append(o)
     return buys, tps
 
@@ -215,7 +217,7 @@ def sell(position, why, tp_orders=()):
 if __name__ == "__main__":
     main = get_tradable(WATCHLIST)
     small = [c for c in get_tradable(SMALL_COIN_WATCHLIST) if c not in main]
-    rotator_sym = rotator_holding()                                   # ✅ never touch the rotator's coin
+    rotator_sym = rotator_holding() if ROTATOR_ENABLED else None      # ✅ never touch the rotator's coin
     positions = crypto_positions(rotator_sym)
     pending_buys, tp_orders = open_orders()
 
