@@ -99,6 +99,16 @@ Re-run `./mac/install.sh` after changing `.env`. Requires the GitHub CLI (`gh`) 
 
 ---
 
+## Chart analysis report (every run)
+
+Every crypto run writes a chart analysis: all coins ranked best buy setup first, with ✅/❌ and
+the value for each of the 5 checks, your positions' P/L, and what the bot did (BOUGHT, SOLD,
+HOLD, wait, skipped and why).
+- **On the Mac:** `~/.alpaca-trading-bot/logs/analysis/crypto-latest.md`, and the top 8 in the run log.
+- **On GitHub (iPhone):** GitHub app → Actions → Trading Bots → open a run → the summary page.
+
+---
+
 ## Backtest: `backtest.py`
 
 Replays the current rules on Alpaca price history, with fees (0.25% per side on crypto).
@@ -135,6 +145,7 @@ Saves `charts/<SYMBOL>.png` with EMA 9 (blue), EMA 21 (black), VWAP (purple), AD
 | `stock_trader.py` | stock bot: budget, top-gainer scan, `RULES` |
 | `runner.py`, `mac/` | Mac runner and its install/uninstall scripts |
 | `.github/workflows/trading_bot.yml` | GitHub Actions schedule |
+| `analysis.py` | writes the chart analysis report on every run |
 | `backtest.py` | replays the rules on past prices, with fees |
 | `chart.py` | saves a PNG chart |
 | `CLAUDE.md` | project notes for Claude sessions (e.g. on claude.ai/code) |

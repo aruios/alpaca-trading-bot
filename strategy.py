@@ -15,7 +15,7 @@ Sell (any one is enough):
 stop_loss=None turns 1 off. min_profit makes 3 fire only above that gain (crypto: +0.75%,
 covering Alpaca's ~0.25% fee each way and the spread); None = signal exit at any P/L.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -134,6 +134,7 @@ class Signal:
     close: float
     strength: float      # ✅ % above trend SMA, used to rank buy candidates
     reason: str
+    checks: list = field(default_factory=list)   # ✅ [(name, passed, value text)] for the analysis report
 
 
 def evaluate(candles, r: Rules) -> Signal:
@@ -167,7 +168,14 @@ def evaluate(candles, r: Rules) -> Signal:
               f"ema{r.ema_fast}{'>' if above_now else '<'}ema{r.ema_slow} "
               f"cross={'yes' if fresh_cross else 'no'} rsi={rsi_now:.1f} "
               f"adx={adx_now or 0:.1f} vwap={vwap_now or 0:.6g}")
-    return Signal(buy, sell, close, strength, reason)
+    checks = [
+        (f"> SMA{r.trend_sma}", uptrend, f"{strength:+.1%}"),
+        (f"EMA{r.ema_fast}/{r.ema_slow} cross", fresh_cross, "fresh" if fresh_cross else ("up" if above_now else "down")),
+        (f"RSI < {r.rsi_max:g}", rsi_now < r.rsi_max, f"{rsi_now:.0f}"),
+        (f"ADX ≥ {r.adx_min:g}", strong, f"{adx_now or 0:.0f}"),
+        ("> VWAP", above_vwap, f"{(close / vwap_now - 1):+.1%}" if vwap_now else "n/a"),
+    ]
+    return Signal(buy, sell, close, strength, reason, checks)
 
 
 def exit_reason(position, signal: Signal, r: Rules):

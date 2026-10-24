@@ -14,6 +14,7 @@ from alpaca.data.requests import CryptoBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from strategy import Rules, closed_candles, evaluate, exit_reason, daily_loss_hit
+from analysis import write_report
 
 # 1. Load credentials
 load_dotenv()
@@ -223,6 +224,11 @@ if __name__ == "__main__":
 
     # ✅ Get candles for everything we might buy AND everything we hold
     signals = get_signals(sorted(set(main) | set(small) | set(positions)))
+    actions = {}                                                      # ✅ what we did, for the analysis report
+    held_before = dict(positions)
+
+    def finish():
+        write_report("crypto", "Crypto chart analysis", signals, actions, held_before)
 
     # ---- 1. SELL: check every crypto position (also ones bought by hand) ----
     sold = set()
@@ -230,20 +236,30 @@ if __name__ == "__main__":
         why = exit_reason(p, signals.get(sym), RULES)
         if why and sell(p, why, tp_orders.get(sym, ())):
             sold.add(sym)
+            actions[sym] = f"🔴 SOLD: {why.split(' (')[0]}"
         elif not why:
-            print(f"HOLD {sym} ({float(p.unrealized_plpc):+.1%})")
+            pl = float(p.unrealized_plpc)
+            print(f"HOLD {sym} ({pl:+.1%})")
+            actions[sym] = (f"HOLD (take-profit at +{RULES.take_profit:.0%}, stop at -{RULES.stop_loss:.0%})"
+                            if RULES.stop_loss else f"HOLD (take-profit at +{RULES.take_profit:.0%})")
+        else:
+            actions[sym] = f"SELL failed: {why.split(' (')[0]}"
     for sym in sold:
         positions.pop(sym)
 
     if not BUY_ENABLED:
         print("New crypto buys are done by top_crypto_rotator.py; managing existing positions only.")
         sync_take_profits(rotator_sym)
+        finish()
         sys.exit(0)
 
     # ---- 2. BUY: only on a fresh signal, within budget ----
     if daily_loss_hit(trading_client.get_account(), DAILY_LOSS_LIMIT):
         print(f"Account down {DAILY_LOSS_LIMIT:.0%}+ today, no new buys.")
         sync_take_profits(rotator_sym)
+        for sym, sig in signals.items():
+            actions.setdefault(sym, "no buys today (account down 3%)" if sig.buy else "wait")
+        finish()
         sys.exit(0)                                                   # ✅ normal stop, sells above already ran
 
     small_set = set(small)
@@ -253,6 +269,7 @@ if __name__ == "__main__":
                       + sum(v for s, v in pending.items() if s in small_set))
     for sym in pending:
         print(f"PENDING {sym}: unfilled buy order(s) ${pending[sym]:.2f}, not buying again")
+        actions[sym] = "buy order pending"
 
     candidates = []
     for sym in main + small:
@@ -264,6 +281,7 @@ if __name__ == "__main__":
             continue
         if sym in small_set and sig.close > SMALL_COIN_MAX_PRICE:
             print(f"  {sym} at ${sig.close:.4f} is above ${SMALL_COIN_MAX_PRICE:.2f}, skipped")
+            actions[sym] = f"skip: small coin above ${SMALL_COIN_MAX_PRICE:g}"
             continue
         candidates.append((sig.strength, sym))
 
@@ -272,16 +290,22 @@ if __name__ == "__main__":
         usd = SMALL_TRADE_USD if is_small else MAIN_TRADE_USD
         if exposure + usd > BUDGET_USD:
             print(f"Budget full (${exposure:.2f}), skipped {sym}")
+            actions[sym] = "skip: budget full"
             continue
         if is_small and small_exposure + usd > SMALL_COIN_BUDGET_USD:
             print(f"Small-coin budget full (${small_exposure:.2f}), skipped {sym}")
+            actions[sym] = "skip: small-coin budget full"
             continue
         if buy(sym, usd):
             exposure += usd
             small_exposure += usd if is_small else 0
+            actions[sym] = f"🟢 BOUGHT ${usd}"
+        else:
+            actions[sym] = "BUY failed"
 
     print(f"Crypto exposure after run: ${exposure:.2f} of ${BUDGET_USD}")
 
     # ---- 3. TAKE-PROFIT: a standing +15% sell on every position ----
     time.sleep(3)                                                     # ✅ let new market buys fill
     sync_take_profits(rotator_sym)
+    finish()
