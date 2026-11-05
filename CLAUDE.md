@@ -27,6 +27,10 @@ Rule-based bot that trades crypto and US stocks on an Alpaca **paper** account
   VWAP purple, ADX red (own panel). Uses the same indicator code as the bot.
 - `analysis.py` - per-run chart analysis report (ranked coins, ✅/❌ per check, action taken) to
   `logs/analysis/crypto-latest.md` and the GitHub Actions step summary. Uses `Signal.checks`.
+- `ai_review.py` - Claude second opinion on each crypto run, **shadow mode** (never trades):
+  buy/sell/hold/skip per coin in the report's "Claude" column and `logs/analysis/ai-shadow.jsonl`;
+  `python ai_review.py --score` compares its calls with the rules' 24h later. Off unless
+  `ANTHROPIC_API_KEY` is set; `AI_REVIEW_MODEL` / `AI_REVIEW_EFFORT` tune model and cost.
 - `backtest.py` - replays current rules on Alpaca history with fees (no orders); run it to
   judge any rule change before shipping. Signals are verified identical to `strategy.evaluate`.
 - `bot.py` - old one-off SPY example, not run by the workflow.
