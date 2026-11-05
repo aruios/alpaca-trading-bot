@@ -15,6 +15,7 @@ from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from strategy import Rules, closed_candles, evaluate, exit_reason, daily_loss_hit
 from analysis import write_report
+import ai_review
 
 # 1. Load credentials
 load_dotenv()
@@ -96,6 +97,9 @@ def crypto_positions(exclude=None):
     }
 
 
+CANDLES = {}                         # ✅ closed candles per coin, kept for the Claude review
+
+
 def get_signals(symbols):
     if not symbols:
         return {}
@@ -107,6 +111,7 @@ def get_signals(symbols):
     for s in symbols:
         candles = closed_candles(bars.get(s, []), RULES.candle_minutes)
         if candles:
+            CANDLES[s] = candles
             signals[s] = evaluate(candles, RULES)
         else:
             print(f"No candles for {s}, skipped")
@@ -228,7 +233,12 @@ if __name__ == "__main__":
     held_before = dict(positions)
 
     def finish():
-        write_report("crypto", "Crypto chart analysis", signals, actions, held_before)
+        try:                                                          # ✅ shadow mode: logs only, never trades
+            ai = ai_review.review(signals, CANDLES, held_before, actions)
+        except Exception as e:
+            print(f"AI review error: {e}")
+            ai = {}
+        write_report("crypto", "Crypto chart analysis", signals, actions, held_before, ai)
 
     # ---- 1. SELL: check every crypto position (also ones bought by hand) ----
     sold = set()

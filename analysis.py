@@ -11,8 +11,17 @@ from datetime import datetime, timezone
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
-def write_report(name, title, signals, actions, positions):
-    """signals: {sym: Signal}; actions: {sym: text}; positions: {sym: position} (P/L shown)."""
+def ai_cell(c):
+    if not c:
+        return ""
+    icon = {"buy": "🟢", "sell": "🔴"}.get(c["action"], "")
+    return f"{icon} {c['action']} ({c['confidence']}): {c['reason']}".strip().replace("|", "/")
+
+
+def write_report(name, title, signals, actions, positions, ai=None):
+    """signals: {sym: Signal}; actions: {sym: text}; positions: {sym: position} (P/L shown);
+    ai: {sym: {action, confidence, reason}} from ai_review.py (shadow mode, adds a Claude column)."""
+    ai = ai or {}
     rows = []
     for sym, sig in signals.items():
         score = sum(ok for _, ok, _ in sig.checks)
@@ -22,13 +31,14 @@ def write_report(name, title, signals, actions, positions):
     names = [n for n, _, _ in next((r[4].checks for r in rows if r[4].checks), [])]
     now = datetime.now(timezone.utc)
     lines = [f"## {title}", f"_{now:%Y-%m-%d %H:%M} UTC · best buy setups first; a buy needs all 5 checks_", "",
-             "| Symbol | Price | Score | " + " | ".join(names) + " | Position P/L | Action |",
-             "|---|---|---|" + "---|" * len(names) + "---|---|"]
+             "| Symbol | Price | Score | " + " | ".join(names) + " | Position P/L | Action |" + (" Claude (shadow) |" if ai else ""),
+             "|---|---|---|" + "---|" * len(names) + "---|---|" + ("---|" if ai else "")]
     for held, score, _, sym, sig in rows:
         cells = [f"{'✅' if ok else '❌'} {val}" for _, ok, val in sig.checks] or ["n/a"] * len(names)
         pl = f"{float(positions[sym].unrealized_plpc):+.1%}" if held else ""
         lines.append(f"| {'**' + sym + '**' if held else sym} | {sig.close:.6g} | {score}/5 | "
-                     + " | ".join(cells) + f" | {pl} | {actions.get(sym, 'wait')} |")
+                     + " | ".join(cells) + f" | {pl} | {actions.get(sym, 'wait')} |"
+                     + (f" {ai_cell(ai.get(sym))} |" if ai else ""))
     text = "\n".join(lines) + "\n"
 
     out_dir = os.path.join(ROOT, "logs", "analysis")

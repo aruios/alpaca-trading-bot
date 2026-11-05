@@ -13,6 +13,7 @@ concurrency:
 env:
   ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
   ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # Claude shadow review in crypto_trader; off if unset
 
 jobs:
   crypto:
